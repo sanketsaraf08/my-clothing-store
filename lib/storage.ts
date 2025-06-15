@@ -17,13 +17,25 @@ export class StorageService {
 
   static getProducts(): Product[] {
     if (typeof window === "undefined") return []
-    const data = localStorage.getItem(this.PRODUCTS_KEY)
-    return data ? JSON.parse(data) : this.getDefaultProducts()
+    try {
+      const data = localStorage.getItem(this.PRODUCTS_KEY)
+      const products = data ? JSON.parse(data) : this.getDefaultProducts()
+      console.log("Products loaded:", products.length)
+      return products
+    } catch (error) {
+      console.error("Error loading products:", error)
+      return this.getDefaultProducts()
+    }
   }
 
   static saveProducts(products: Product[]): void {
     if (typeof window === "undefined") return
-    localStorage.setItem(this.PRODUCTS_KEY, JSON.stringify(products))
+    try {
+      localStorage.setItem(this.PRODUCTS_KEY, JSON.stringify(products))
+      console.log("Products saved successfully:", products.length)
+    } catch (error) {
+      console.error("Error saving products:", error)
+    }
   }
 
   static getCart(): CartItem[] {

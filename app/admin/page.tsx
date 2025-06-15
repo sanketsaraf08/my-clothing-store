@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast"
 import { StorageService } from "@/lib/storage"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
+import DebugPanel from "@/components/debug-panel"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -54,13 +55,23 @@ export default function AdminPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Validate form data
+    if (!formData.name || !formData.price || !formData.quantity) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
     const productData = {
-      name: formData.name,
+      name: formData.name.trim(),
       barcode: editingProduct ? editingProduct.barcode : StorageService.generateBarcode(),
       price: Number.parseFloat(formData.price),
       quantity: Number.parseInt(formData.quantity),
       category: formData.category,
-      image: formData.image || undefined,
+      image: formData.image.trim() || undefined,
       soldQuantity: editingProduct?.soldQuantity || 0,
     }
 
@@ -81,20 +92,25 @@ export default function AdminPage() {
       }
 
       if (response.ok) {
+        const result = await response.json()
         toast({
           title: "Success",
           description: `Product ${editingProduct ? "updated" : "created"} successfully`,
         })
-        fetchProducts()
+
+        // Force refresh the products list
+        await fetchProducts()
         resetForm()
         setIsDialogOpen(false)
       } else {
-        throw new Error("Failed to save product")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to save product")
       }
     } catch (error) {
+      console.error("Error saving product:", error)
       toast({
         title: "Error",
-        description: `Failed to ${editingProduct ? "update" : "create"} product`,
+        description: `Failed to ${editingProduct ? "update" : "create"} product: ${error.message}`,
         variant: "destructive",
       })
     }
@@ -335,6 +351,7 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      <DebugPanel />
     </div>
   )
 }
