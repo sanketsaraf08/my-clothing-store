@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Search, Package } from "lucide-react"
+import { ShoppingCart, Search, Package, RefreshCw } from "lucide-react"
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
@@ -23,6 +23,15 @@ export default function StorePage() {
 
   useEffect(() => {
     fetchProducts()
+
+    // Listen for storage changes
+    const handleStorageChange = () => {
+      console.log("Storage changed on store page, refreshing...")
+      fetchProducts()
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
   }, [])
 
   useEffect(() => {
@@ -31,9 +40,16 @@ export default function StorePage() {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch("/api/products")
+      setLoading(true)
+      const response = await fetch("/api/products", {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
       if (response.ok) {
         const data = await response.json()
+        console.log("Store page: Loaded products:", data.length)
         setProducts(data)
       }
     } catch (error) {
@@ -128,6 +144,10 @@ export default function StorePage() {
                 ))}
               </SelectContent>
             </Select>
+            <Button onClick={fetchProducts} variant="outline" className="bg-white">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
           </div>
         </div>
 
@@ -137,6 +157,7 @@ export default function StorePage() {
               <Package className="h-12 w-12 text-blue-400 mb-4" />
               <h3 className="text-lg font-medium text-blue-900 mb-2">No products found</h3>
               <p className="text-blue-600">Try adjusting your search or filter criteria</p>
+              <p className="text-sm text-blue-500 mt-2">Total products in store: {products.length}</p>
             </CardContent>
           </Card>
         ) : (

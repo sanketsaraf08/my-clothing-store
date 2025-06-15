@@ -20,10 +20,10 @@ export class StorageService {
     try {
       const data = localStorage.getItem(this.PRODUCTS_KEY)
       const products = data ? JSON.parse(data) : this.getDefaultProducts()
-      console.log("Products loaded:", products.length)
+      console.log("Storage: Loaded products:", products.length)
       return products
     } catch (error) {
-      console.error("Error loading products:", error)
+      console.error("Storage: Error loading products:", error)
       return this.getDefaultProducts()
     }
   }
@@ -32,9 +32,17 @@ export class StorageService {
     if (typeof window === "undefined") return
     try {
       localStorage.setItem(this.PRODUCTS_KEY, JSON.stringify(products))
-      console.log("Products saved successfully:", products.length)
+      console.log("Storage: Saved products successfully:", products.length)
+
+      // Trigger a storage event to notify other components
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: this.PRODUCTS_KEY,
+          newValue: JSON.stringify(products),
+        }),
+      )
     } catch (error) {
-      console.error("Error saving products:", error)
+      console.error("Storage: Error saving products:", error)
     }
   }
 

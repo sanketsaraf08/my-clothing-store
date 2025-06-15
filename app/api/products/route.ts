@@ -5,8 +5,10 @@ import { generateId } from "@/lib/utils"
 export async function GET() {
   try {
     const products = StorageService.getProducts()
+    console.log("API GET: Returning products:", products.length)
     return NextResponse.json(products)
   } catch (error) {
+    console.error("API GET Error:", error)
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 })
   }
 }
@@ -14,6 +16,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log("API POST: Received data:", body)
 
     // Validate required fields
     if (!body.name || !body.price || !body.quantity || !body.category) {
@@ -21,6 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const products = StorageService.getProducts()
+    console.log("API POST: Current products count:", products.length)
 
     const newProduct = {
       id: generateId(),
@@ -35,12 +39,16 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(),
     }
 
+    console.log("API POST: Creating new product:", newProduct)
+
     products.push(newProduct)
     StorageService.saveProducts(products)
 
+    console.log("API POST: Products after save:", products.length)
+
     return NextResponse.json(newProduct, { status: 201 })
   } catch (error) {
-    console.error("Error creating product:", error)
+    console.error("API POST Error:", error)
     return NextResponse.json({ error: "Failed to create product" }, { status: 500 })
   }
 }

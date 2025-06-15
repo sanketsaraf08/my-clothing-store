@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, Printer } from "lucide-react"
+import { Plus, Edit, Trash2, Package, Printer, RefreshCw } from "lucide-react"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
@@ -18,14 +18,13 @@ import { StorageService } from "@/lib/storage"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
 import DebugPanel from "@/components/debug-panel"
-import ImageUpload from "@/components/image-upload"
-import BulkImageUpload from "@/components/bulk-image-upload"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForSticker, setSelectedProductForSticker] = useState<Product | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -36,21 +35,45 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchProducts()
+
+    // Listen for storage changes
+    const handleStorageChange = () => {
+      console.log("Storage changed, refreshing products...")
+      fetchProducts()
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
   }, [])
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch("/api/products")
+      setIsLoading(true)
+      console.log("Fetching products from API...")
+
+      const response = await fetch("/api/products", {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
+
       if (response.ok) {
         const data = await response.json()
+        console.log("Fetched products:", data.length)
         setProducts(data)
+      } else {
+        throw new Error(`HTTP ${response.status}`)
       }
     } catch (error) {
+      console.error("Error fetching products:", error)
       toast({
         title: "Error",
         description: "Failed to load products",
         variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -77,8 +100,12 @@ export default function AdminPage() {
       soldQuantity: editingProduct?.soldQuantity || 0,
     }
 
+    console.log("Submitting product data:", productData)
+
     try {
+      setIsLoading(true)
       let response
+
       if (editingProduct) {
         response = await fetch(`/api/products/${editingProduct.id}`, {
           method: "PUT",
@@ -95,15 +122,19 @@ export default function AdminPage() {
 
       if (response.ok) {
         const result = await response.json()
+        console.log("Product saved successfully:", result)
+
         toast({
           title: "Success",
           description: `Product ${editingProduct ? "updated" : "created"} successfully`,
         })
 
-        // Force refresh the products list
-        await fetchProducts()
-        resetForm()
-        setIsDialogOpen(false)
+        // Wait a moment then refresh
+        setTimeout(async () => {
+          await fetchProducts()
+          resetForm()
+          setIsDialogOpen(false)
+        }, 500)
       } else {
         const errorData = await response.json()
         throw new Error(errorData.error || "Failed to save product")
@@ -115,6 +146,8 @@ export default function AdminPage() {
         description: `Failed to ${editingProduct ? "update" : "create"} product: ${error.message}`,
         variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -134,6 +167,7 @@ export default function AdminPage() {
     if (!confirm("Are you sure you want to delete this product?")) return
 
     try {
+      setIsLoading(true)
       const response = await fetch(`/api/products/${productId}`, {
         method: "DELETE",
       })
@@ -143,7 +177,7 @@ export default function AdminPage() {
           title: "Success",
           description: "Product deleted successfully",
         })
-        fetchProducts()
+        await fetchProducts()
       } else {
         throw new Error("Failed to delete product")
       }
@@ -153,6 +187,8 @@ export default function AdminPage() {
         description: "Failed to delete product",
         variant: "destructive",
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -181,98 +217,107 @@ export default function AdminPage() {
               <p className="text-blue-700">Manage your product inventory</p>
             </div>
 
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Product
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-blue-900">
-                    {editingProduct ? "Edit Product" : "Add New Product"}
-                  </DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Product Name</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
-                  </div>
+            <div className="flex gap-2">
+              <Button onClick={fetchProducts} variant="outline" disabled={isLoading} className="bg-white">
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
 
-                  {editingProduct && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={resetForm} className="bg-blue-600 hover:bg-blue-700">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Product
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-blue-900">
+                      {editingProduct ? "Edit Product" : "Add New Product"}
+                    </DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <Label>Barcode (Auto-generated)</Label>
-                      <Input value={editingProduct.barcode} disabled className="bg-gray-100" />
+                      <Label htmlFor="name">Product Name</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        required
+                      />
                     </div>
-                  )}
 
-                  <div>
-                    <Label htmlFor="price">Price (₹)</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="1"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      required
-                    />
-                  </div>
+                    {editingProduct && (
+                      <div>
+                        <Label>Barcode (Auto-generated)</Label>
+                        <Input value={editingProduct.barcode} disabled className="bg-gray-100" />
+                      </div>
+                    )}
 
-                  <div>
-                    <Label htmlFor="quantity">Quantity</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                      required
-                    />
-                  </div>
+                    <div>
+                      <Label htmlFor="price">Price (₹)</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="1"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <Label htmlFor="category">Category</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value) => setFormData({ ...formData, category: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category.charAt(0).toUpperCase() + category.slice(1)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <div>
+                      <Label htmlFor="quantity">Quantity</Label>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <ImageUpload
-                      value={formData.image}
-                      onChange={(url) => setFormData({ ...formData, image: url })}
-                      onRemove={() => setFormData({ ...formData, image: "" })}
-                    />
-                  </div>
+                    <div>
+                      <Label htmlFor="category">Category</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value) => setFormData({ ...formData, category: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category.charAt(0).toUpperCase() + category.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="flex gap-2">
-                    <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700">
-                      {editingProduct ? "Update" : "Create"} Product
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
+                    <div>
+                      <Label htmlFor="image">Product Image URL</Label>
+                      <Input
+                        id="image"
+                        value={formData.image}
+                        onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                        placeholder="Enter image URL or leave blank for default"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
+                        {isLoading ? "Saving..." : editingProduct ? "Update" : "Create"} Product
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
 
@@ -282,61 +327,73 @@ export default function AdminPage() {
               <CardHeader className="bg-blue-50">
                 <CardTitle className="flex items-center gap-2 text-blue-900">
                   <Package className="h-5 w-5" />
-                  Product Inventory ({products.length})
+                  Product Inventory ({products.length}){isLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Barcode</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Sold Qty</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products.map((product) => (
-                        <TableRow key={product.id}>
-                          <TableCell className="font-medium">{product.name}</TableCell>
-                          <TableCell className="font-mono text-sm">{product.barcode}</TableCell>
-                          <TableCell className="capitalize">{product.category}</TableCell>
-                          <TableCell>{formatCurrency(product.price)}</TableCell>
-                          <TableCell>
-                            <span className={product.quantity < 10 ? "text-red-600 font-medium" : ""}>
-                              {product.quantity}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-green-600 font-medium">{product.soldQuantity}</span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button variant="outline" size="sm" onClick={() => handleEdit(product)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedProductForSticker(product)}
-                                className="text-blue-600 hover:text-blue-700"
-                              >
-                                <Printer className="h-4 w-4" />
-                              </Button>
-                              <Button variant="outline" size="sm" onClick={() => handleDelete(product.id)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                {products.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Package className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-blue-900 mb-2">No products found</h3>
+                    <p className="text-blue-600 mb-4">Add your first product to get started</p>
+                    <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Product
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Barcode</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Sold Qty</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {products.map((product) => (
+                          <TableRow key={product.id}>
+                            <TableCell className="font-medium">{product.name}</TableCell>
+                            <TableCell className="font-mono text-sm">{product.barcode}</TableCell>
+                            <TableCell className="capitalize">{product.category}</TableCell>
+                            <TableCell>{formatCurrency(product.price)}</TableCell>
+                            <TableCell>
+                              <span className={product.quantity < 10 ? "text-red-600 font-medium" : ""}>
+                                {product.quantity}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-green-600 font-medium">{product.soldQuantity}</span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={() => handleEdit(product)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedProductForSticker(product)}
+                                  className="text-blue-600 hover:text-blue-700"
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => handleDelete(product.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -350,7 +407,6 @@ export default function AdminPage() {
             )}
           </div>
         </div>
-        <BulkImageUpload products={products} onUpdate={fetchProducts} />
       </div>
       <DebugPanel />
     </div>
