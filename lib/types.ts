@@ -3,37 +3,42 @@ export interface Product {
   name: string
   barcode: string
   price: number
-  quantity: number // current stock
-  soldQuantity: number // sold stock
+  quantity: number
+  soldQuantity: number
   category: string
   image?: string
+  images?: string[] // Support multiple images
+  description?: string
   createdAt: Date
   updatedAt: Date
 }
 
 export interface CartItem {
-  product: Product
+  id: string
+  productId: string
+  name: string
+  barcode: string
+  price: number
+  originalPrice: number
   quantity: number
-  customPrice?: number
+  image?: string
 }
 
 export interface Bill {
   id: string
   items: CartItem[]
-  subtotal: number
-  discount: number
   total: number
-  upiId: string
-  createdAt: Date
+  customerPhone?: string
   qrCode: string
+  createdAt: Date
 }
 
-export interface StockSummary {
-  totalProducts: number
-  totalCurrentStock: number
-  totalSoldStock: number
-  totalStockValue: number
-  totalSoldValue: number
+export interface Customer {
+  id: string
+  phone: string
+  name?: string
+  email?: string
+  totalPurchases: number
+  lastPurchase: Date
+  createdAt: Date
 }
-
-export type Category = "shirts" | "pants" | "dresses" | "shoes" | "accessories"

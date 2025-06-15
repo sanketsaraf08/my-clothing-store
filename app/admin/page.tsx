@@ -18,6 +18,8 @@ import { StorageService } from "@/lib/storage"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
 import DebugPanel from "@/components/debug-panel"
+import ImageUpload from "@/components/image-upload"
+import BulkImageUpload from "@/components/bulk-image-upload"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -253,12 +255,10 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="image">Product Image URL</Label>
-                    <Input
-                      id="image"
+                    <ImageUpload
                       value={formData.image}
-                      onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                      placeholder="Enter image URL or leave blank for default"
+                      onChange={(url) => setFormData({ ...formData, image: url })}
+                      onRemove={() => setFormData({ ...formData, image: "" })}
                     />
                   </div>
 
@@ -350,6 +350,7 @@ export default function AdminPage() {
             )}
           </div>
         </div>
+        <BulkImageUpload products={products} onUpdate={fetchProducts} />
       </div>
       <DebugPanel />
     </div>
