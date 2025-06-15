@@ -7,8 +7,6 @@ export interface Product {
   soldQuantity: number
   category: string
   image?: string
-  images?: string[] // Support multiple images
-  description?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -42,3 +40,5 @@ export interface Customer {
   lastPurchase: Date
   createdAt: Date
 }
+
+export type Category = "shirts" | "pants" | "dresses" | "shoes" | "accessories"

@@ -14,10 +14,8 @@ import { Plus, Edit, Trash2, Package, Printer, RefreshCw } from "lucide-react"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { StorageService } from "@/lib/storage"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
-import DebugPanel from "@/components/debug-panel"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -25,11 +23,12 @@ export default function AdminPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForSticker, setSelectedProductForSticker] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     price: "",
     quantity: "",
-    category: "shirts",
+    category: "shirts" as const,
     image: "",
   })
 
@@ -42,8 +41,10 @@ export default function AdminPage() {
       fetchProducts()
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorageChange)
+      return () => window.removeEventListener("storage", handleStorageChange)
+    }
   }, [])
 
   const fetchProducts = async () => {
@@ -63,13 +64,14 @@ export default function AdminPage() {
         console.log("Fetched products:", data.length)
         setProducts(data)
       } else {
-        throw new Error(`HTTP ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
     } catch (error) {
       console.error("Error fetching products:", error)
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: "Failed to load products. Using local storage if available.",
         variant: "destructive",
       })
     } finally {
@@ -81,10 +83,28 @@ export default function AdminPage() {
     e.preventDefault()
 
     // Validate form data
-    if (!formData.name || !formData.price || !formData.quantity) {
+    if (!formData.name.trim()) {
       toast({
-        title: "Error",
-        description: "Please fill in all required fields",
+        title: "Validation Error",
+        description: "Product name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid price",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid quantity",
         variant: "destructive",
       })
       return
@@ -92,9 +112,9 @@ export default function AdminPage() {
 
     const productData = {
       name: formData.name.trim(),
-      barcode: editingProduct ? editingProduct.barcode : StorageService.generateBarcode(),
-      price: Number.parseFloat(formData.price),
-      quantity: Number.parseInt(formData.quantity),
+      barcode: editingProduct ? editingProduct.barcode : undefined,
+      price: Number(formData.price),
+      quantity: Number(formData.quantity),
       category: formData.category,
       image: formData.image.trim() || undefined,
       soldQuantity: editingProduct?.soldQuantity || 0,
@@ -103,7 +123,7 @@ export default function AdminPage() {
     console.log("Submitting product data:", productData)
 
     try {
-      setIsLoading(true)
+      setIsSubmitting(true)
       let response
 
       if (editingProduct) {
@@ -125,7 +145,7 @@ export default function AdminPage() {
         console.log("Product saved successfully:", result)
 
         toast({
-          title: "Success",
+          title: "Success!",
           description: `Product ${editingProduct ? "updated" : "created"} successfully`,
         })
 
@@ -137,17 +157,17 @@ export default function AdminPage() {
         }, 500)
       } else {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to save product")
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
     } catch (error) {
       console.error("Error saving product:", error)
       toast({
         title: "Error",
-        description: `Failed to ${editingProduct ? "update" : "create"} product: ${error.message}`,
+        description: `Failed to ${editingProduct ? "update" : "create"} product: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
@@ -157,7 +177,7 @@ export default function AdminPage() {
       name: product.name,
       price: product.price.toString(),
       quantity: product.quantity.toString(),
-      category: product.category,
+      category: product.category as any,
       image: product.image || "",
     })
     setIsDialogOpen(true)
@@ -179,12 +199,14 @@ export default function AdminPage() {
         })
         await fetchProducts()
       } else {
-        throw new Error("Failed to delete product")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete product")
       }
     } catch (error) {
+      console.error("Error deleting product:", error)
       toast({
         title: "Error",
-        description: "Failed to delete product",
+        description: `Failed to delete product: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
       })
     } finally {
@@ -238,12 +260,13 @@ export default function AdminPage() {
                   </DialogHeader>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <Label htmlFor="name">Product Name</Label>
+                      <Label htmlFor="name">Product Name *</Label>
                       <Input
                         id="name"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
+                        placeholder="Enter product name"
                       />
                     </div>
 
@@ -255,33 +278,37 @@ export default function AdminPage() {
                     )}
 
                     <div>
-                      <Label htmlFor="price">Price (₹)</Label>
+                      <Label htmlFor="price">Price (₹) *</Label>
                       <Input
                         id="price"
                         type="number"
                         step="1"
+                        min="0"
                         value={formData.price}
                         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                         required
+                        placeholder="Enter price"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="quantity">Quantity</Label>
+                      <Label htmlFor="quantity">Quantity *</Label>
                       <Input
                         id="quantity"
                         type="number"
+                        min="0"
                         value={formData.quantity}
                         onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                         required
+                        placeholder="Enter quantity"
                       />
                     </div>
 
                     <div>
-                      <Label htmlFor="category">Category</Label>
+                      <Label htmlFor="category">Category *</Label>
                       <Select
                         value={formData.category}
-                        onValueChange={(value) => setFormData({ ...formData, category: value })}
+                        onValueChange={(value) => setFormData({ ...formData, category: value as any })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -302,15 +329,20 @@ export default function AdminPage() {
                         id="image"
                         value={formData.image}
                         onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                        placeholder="Enter image URL or leave blank for default"
+                        placeholder="Enter image URL (optional)"
                       />
                     </div>
 
                     <div className="flex gap-2">
-                      <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
-                        {isLoading ? "Saving..." : editingProduct ? "Update" : "Create"} Product
+                      <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+                        {isSubmitting ? "Saving..." : editingProduct ? "Update" : "Create"} Product
                       </Button>
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsDialogOpen(false)}
+                        disabled={isSubmitting}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -408,7 +440,6 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
-      <DebugPanel />
     </div>
   )
 }
