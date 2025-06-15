@@ -1,11 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { StorageService } from "@/lib/storage"
-import { generateId } from "@/lib/utils"
+import { db } from "@/lib/database"
 
 export async function GET() {
   try {
-    const products = StorageService.getProducts()
-    console.log("API GET: Returning products:", products.length)
+    const products = await db.getProducts()
     return NextResponse.json(products)
   } catch (error) {
     console.error("API GET Error:", error)
@@ -23,29 +21,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const products = StorageService.getProducts()
-    console.log("API POST: Current products count:", products.length)
-
-    const newProduct = {
-      id: generateId(),
+    const newProduct = await db.createProduct({
       name: body.name,
-      barcode: body.barcode || StorageService.generateBarcode(),
+      barcode: body.barcode || `${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
       price: Number(body.price),
       quantity: Number(body.quantity),
       soldQuantity: body.soldQuantity || 0,
       category: body.category,
       image: body.image || undefined,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
+    })
 
-    console.log("API POST: Creating new product:", newProduct)
-
-    products.push(newProduct)
-    StorageService.saveProducts(products)
-
-    console.log("API POST: Products after save:", products.length)
-
+    console.log("API POST: Created product:", newProduct)
     return NextResponse.json(newProduct, { status: 201 })
   } catch (error) {
     console.error("API POST Error:", error)

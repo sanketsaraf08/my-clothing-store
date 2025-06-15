@@ -1,10 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { StorageService } from "@/lib/storage"
+import { db } from "@/lib/database"
 
 export async function GET(request: NextRequest, { params }: { params: { barcode: string } }) {
   try {
-    const products = StorageService.getProducts()
-    const product = products.find((p) => p.barcode === params.barcode)
+    const product = await db.getProductByBarcode(params.barcode)
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
@@ -12,6 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: { barcode:
 
     return NextResponse.json(product)
   } catch (error) {
+    console.error("API GET Error:", error)
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 })
   }
 }
