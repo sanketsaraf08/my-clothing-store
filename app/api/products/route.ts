@@ -3,7 +3,9 @@ import { db } from "@/lib/database"
 
 export async function GET() {
   try {
+    console.log("API: Fetching products from Supabase...")
     const products = await db.getProducts()
+    console.log(`API: Found ${products.length} products`)
     return NextResponse.json(products)
   } catch (error) {
     console.error("API GET Error:", error)
@@ -14,7 +16,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log("API POST: Received data:", body)
+    console.log("API: Creating product:", body)
 
     // Validate required fields
     if (!body.name || !body.price || !body.quantity || !body.category) {
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     const newProduct = await db.createProduct({
       name: body.name,
-      barcode: body.barcode || `${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
+      barcode: body.barcode || db.generateBarcode(),
       price: Number(body.price),
       quantity: Number(body.quantity),
       soldQuantity: body.soldQuantity || 0,
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
       image: body.image || undefined,
     })
 
-    console.log("API POST: Created product:", newProduct)
+    console.log("API: Product created successfully:", newProduct.id)
     return NextResponse.json(newProduct, { status: 201 })
   } catch (error) {
     console.error("API POST Error:", error)
