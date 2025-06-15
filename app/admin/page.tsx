@@ -10,10 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, Printer, RefreshCw } from "lucide-react"
+import { Plus, Edit, Trash2, Package, Printer, RefreshCw, Database, RotateCcw } from "lucide-react"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
+import { db } from "@/lib/database"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
 
@@ -33,7 +34,8 @@ export default function AdminPage() {
   })
 
   useEffect(() => {
-    fetchProducts()
+    // Initialize database and load products
+    initializeAndFetch()
 
     // Listen for storage changes
     const handleStorageChange = () => {
@@ -47,31 +49,28 @@ export default function AdminPage() {
     }
   }, [])
 
+  const initializeAndFetch = async () => {
+    try {
+      await db.initialize()
+      await fetchProducts()
+    } catch (error) {
+      console.error("Error initializing:", error)
+    }
+  }
+
   const fetchProducts = async () => {
     try {
       setIsLoading(true)
-      console.log("Fetching products from API...")
+      console.log("Fetching products from database...")
 
-      const response = await fetch("/api/products", {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Fetched products:", data.length)
-        setProducts(data)
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
+      const data = await db.getProducts()
+      console.log("Fetched products:", data.length)
+      setProducts(data)
     } catch (error) {
       console.error("Error fetching products:", error)
       toast({
         title: "Error",
-        description: "Failed to load products. Using local storage if available.",
+        description: "Failed to load products",
         variant: "destructive",
       })
     } finally {
@@ -112,7 +111,7 @@ export default function AdminPage() {
 
     const productData = {
       name: formData.name.trim(),
-      barcode: editingProduct ? editingProduct.barcode : undefined,
+      barcode: editingProduct ? editingProduct.barcode : db.generateBarcode(),
       price: Number(formData.price),
       quantity: Number(formData.quantity),
       category: formData.category,
@@ -120,45 +119,29 @@ export default function AdminPage() {
       soldQuantity: editingProduct?.soldQuantity || 0,
     }
 
-    console.log("Submitting product data:", productData)
+    console.log("Creating product with data:", productData)
 
     try {
       setIsSubmitting(true)
-      let response
 
+      let result: Product
       if (editingProduct) {
-        response = await fetch(`/api/products/${editingProduct.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(productData),
-        })
+        result = await db.updateProduct(editingProduct.id, productData)
       } else {
-        response = await fetch("/api/products", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(productData),
-        })
+        result = await db.createProduct(productData)
       }
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log("Product saved successfully:", result)
+      console.log("Product operation successful:", result)
 
-        toast({
-          title: "Success!",
-          description: `Product ${editingProduct ? "updated" : "created"} successfully`,
-        })
+      toast({
+        title: "Success!",
+        description: `Product ${editingProduct ? "updated" : "created"} successfully`,
+      })
 
-        // Wait a moment then refresh
-        setTimeout(async () => {
-          await fetchProducts()
-          resetForm()
-          setIsDialogOpen(false)
-        }, 500)
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
+      // Immediately refresh the products list
+      await fetchProducts()
+      resetForm()
+      setIsDialogOpen(false)
     } catch (error) {
       console.error("Error saving product:", error)
       toast({
@@ -188,25 +171,42 @@ export default function AdminPage() {
 
     try {
       setIsLoading(true)
-      const response = await fetch(`/api/products/${productId}`, {
-        method: "DELETE",
+      await db.deleteProduct(productId)
+
+      toast({
+        title: "Success",
+        description: "Product deleted successfully",
       })
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Product deleted successfully",
-        })
-        await fetchProducts()
-      } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete product")
-      }
+      await fetchProducts()
     } catch (error) {
       console.error("Error deleting product:", error)
       toast({
         title: "Error",
         description: `Failed to delete product: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleReloadDemo = async () => {
+    if (!confirm("This will reload demo products. Continue?")) return
+
+    try {
+      setIsLoading(true)
+      db.reloadDemoProducts()
+      await fetchProducts()
+      toast({
+        title: "Success",
+        description: "Demo products reloaded successfully",
+      })
+    } catch (error) {
+      console.error("Error reloading demo:", error)
+      toast({
+        title: "Error",
+        description: "Failed to reload demo products",
         variant: "destructive",
       })
     } finally {
@@ -243,6 +243,11 @@ export default function AdminPage() {
               <Button onClick={fetchProducts} variant="outline" disabled={isLoading} className="bg-white">
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh
+              </Button>
+
+              <Button onClick={handleReloadDemo} variant="outline" disabled={isLoading} className="bg-white">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reload Demo
               </Button>
 
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -367,11 +372,17 @@ export default function AdminPage() {
                   <div className="text-center py-8">
                     <Package className="h-12 w-12 text-blue-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-blue-900 mb-2">No products found</h3>
-                    <p className="text-blue-600 mb-4">Add your first product to get started</p>
-                    <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Product
-                    </Button>
+                    <p className="text-blue-600 mb-4">Add your first product or reload demo products</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Product
+                      </Button>
+                      <Button onClick={handleReloadDemo} variant="outline">
+                        <Database className="h-4 w-4 mr-2" />
+                        Load Demo Products
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">

@@ -11,6 +11,7 @@ import { ShoppingCart, Search, Package, RefreshCw } from "lucide-react"
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
+import { db } from "@/lib/database"
 import Navigation from "@/components/navigation"
 
 export default function StorePage() {
@@ -22,7 +23,7 @@ export default function StorePage() {
   const { dispatch } = useCart()
 
   useEffect(() => {
-    fetchProducts()
+    initializeAndFetch()
 
     // Listen for storage changes
     const handleStorageChange = () => {
@@ -30,29 +31,33 @@ export default function StorePage() {
       fetchProducts()
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", handleStorageChange)
+      return () => window.removeEventListener("storage", handleStorageChange)
+    }
   }, [])
 
   useEffect(() => {
     filterProducts()
   }, [products, searchTerm, selectedCategory])
 
+  const initializeAndFetch = async () => {
+    try {
+      await db.initialize()
+      await fetchProducts()
+    } catch (error) {
+      console.error("Error initializing store:", error)
+    }
+  }
+
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/products", {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      })
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Store page: Loaded products:", data.length)
-        setProducts(data)
-      }
+      const data = await db.getProducts()
+      console.log("Store page: Loaded products:", data.length)
+      setProducts(data)
     } catch (error) {
+      console.error("Error fetching products:", error)
       toast({
         title: "Error",
         description: "Failed to load products",
@@ -173,10 +178,13 @@ export default function StorePage() {
                       src={product.image || "/placeholder.svg"}
                       alt={product.name}
                       className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none"
+                        e.currentTarget.nextElementSibling?.classList.remove("hidden")
+                      }}
                     />
-                  ) : (
-                    <Package className="h-16 w-16 text-blue-400" />
-                  )}
+                  ) : null}
+                  <Package className={`h-16 w-16 text-blue-400 ${product.image ? "hidden" : ""}`} />
                 </div>
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
