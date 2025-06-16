@@ -5,6 +5,12 @@ import type { Product, Bill } from "@/lib/types"
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+console.log("Database initialization:", {
+  hasSupabaseUrl: !!supabaseUrl,
+  hasSupabaseKey: !!supabaseKey,
+  supabaseUrl: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : "Not set",
+})
+
 // Fallback to localStorage if Supabase is not configured
 const hasSupabase = supabaseUrl && supabaseKey
 
@@ -12,9 +18,12 @@ let supabase: any = null
 if (hasSupabase) {
   try {
     supabase = createClient(supabaseUrl!, supabaseKey!)
+    console.log("✅ Supabase client initialized successfully")
   } catch (error) {
-    console.warn("Failed to initialize Supabase client:", error)
+    console.warn("❌ Failed to initialize Supabase client:", error)
   }
+} else {
+  console.log("⚠️ Supabase not configured, using localStorage fallback")
 }
 
 // Demo products for Moraya Fashion
@@ -111,23 +120,42 @@ const DEMO_PRODUCTS: Omit<Product, "id" | "createdAt" | "updatedAt">[] = [
   },
 ]
 
-// Fallback localStorage service
+// Enhanced localStorage service with better error handling
 class LocalStorageService {
   private static PRODUCTS_KEY = "moraya_fashion_products"
   private static BILLS_KEY = "moraya_fashion_bills"
   private static DEMO_LOADED_KEY = "moraya_fashion_demo_loaded"
 
+  static isAvailable(): boolean {
+    try {
+      if (typeof window === "undefined") return false
+      const test = "__localStorage_test__"
+      localStorage.setItem(test, test)
+      localStorage.removeItem(test)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   static getProducts(): Product[] {
-    if (typeof window === "undefined") return []
+    if (!this.isAvailable()) {
+      console.log("❌ localStorage not available")
+      return []
+    }
+
     try {
       // Check if demo products need to be loaded
       const demoLoaded = localStorage.getItem(this.DEMO_LOADED_KEY)
       if (!demoLoaded) {
+        console.log("🔄 Loading demo products for first time...")
         this.loadDemoProducts()
       }
 
       const data = localStorage.getItem(this.PRODUCTS_KEY)
       const products = data ? JSON.parse(data) : []
+
+      console.log(`📦 Retrieved ${products.length} products from localStorage`)
 
       // Ensure dates are properly converted
       return products.map((p: any) => ({
@@ -136,57 +164,75 @@ class LocalStorageService {
         updatedAt: new Date(p.updatedAt),
       }))
     } catch (error) {
-      console.error("Error reading products from localStorage:", error)
+      console.error("❌ Error reading products from localStorage:", error)
       return []
     }
   }
 
   static saveProducts(products: Product[]): void {
-    if (typeof window === "undefined") return
+    if (!this.isAvailable()) {
+      console.error("❌ localStorage not available for saving")
+      return
+    }
+
     try {
-      localStorage.setItem(this.PRODUCTS_KEY, JSON.stringify(products))
-      console.log(`Saved ${products.length} products to localStorage`)
+      const serializedProducts = JSON.stringify(products)
+      localStorage.setItem(this.PRODUCTS_KEY, serializedProducts)
+      console.log(`✅ Saved ${products.length} products to localStorage`)
 
       // Trigger storage event for cross-tab sync
       window.dispatchEvent(
         new StorageEvent("storage", {
           key: this.PRODUCTS_KEY,
-          newValue: JSON.stringify(products),
+          newValue: serializedProducts,
         }),
       )
     } catch (error) {
-      console.error("Error saving products to localStorage:", error)
+      console.error("❌ Error saving products to localStorage:", error)
+      throw new Error("Failed to save products to localStorage")
     }
   }
 
   static loadDemoProducts(): void {
-    if (typeof window === "undefined") return
+    if (!this.isAvailable()) return
 
     try {
-      const existingProducts = this.getProducts()
+      const existingProducts = this.getRawProducts()
       if (existingProducts.length > 0) {
-        // Products already exist, don't load demo
+        console.log("📦 Products already exist, skipping demo load")
         localStorage.setItem(this.DEMO_LOADED_KEY, "true")
         return
       }
 
-      console.log("Loading demo products for Moraya Fashion...")
+      console.log("🎯 Loading demo products for Moraya Fashion...")
       const demoProducts: Product[] = DEMO_PRODUCTS.map((product, index) => ({
         ...product,
         id: this.generateId(),
-        createdAt: new Date(Date.now() - (DEMO_PRODUCTS.length - index) * 60000), // Stagger creation times
+        createdAt: new Date(Date.now() - (DEMO_PRODUCTS.length - index) * 60000),
         updatedAt: new Date(Date.now() - (DEMO_PRODUCTS.length - index) * 60000),
       }))
 
       this.saveProducts(demoProducts)
       localStorage.setItem(this.DEMO_LOADED_KEY, "true")
-      console.log(`Loaded ${demoProducts.length} demo products`)
+      console.log(`✅ Successfully loaded ${demoProducts.length} demo products`)
     } catch (error) {
-      console.error("Error loading demo products:", error)
+      console.error("❌ Error loading demo products:", error)
+    }
+  }
+
+  private static getRawProducts(): any[] {
+    if (!this.isAvailable()) return []
+    try {
+      const data = localStorage.getItem(this.PRODUCTS_KEY)
+      return data ? JSON.parse(data) : []
+    } catch {
+      return []
     }
   }
 
   static async createProduct(product: Omit<Product, "id" | "createdAt" | "updatedAt">): Promise<Product> {
+    console.log("🔄 Creating product in localStorage:", product.name)
+
     const products = this.getProducts()
     const newProduct: Product = {
       ...product,
@@ -197,14 +243,22 @@ class LocalStorageService {
 
     products.unshift(newProduct) // Add to beginning for newest first
     this.saveProducts(products)
-    console.log("Created new product:", newProduct.name, "ID:", newProduct.id)
+
+    console.log("✅ Product created successfully:", {
+      id: newProduct.id,
+      name: newProduct.name,
+      totalProducts: products.length,
+    })
+
     return newProduct
   }
 
   static async updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
     const products = this.getProducts()
     const index = products.findIndex((p) => p.id === id)
-    if (index === -1) throw new Error("Product not found")
+    if (index === -1) {
+      throw new Error(`Product with ID ${id} not found`)
+    }
 
     const updatedProduct = {
       ...products[index],
@@ -213,22 +267,32 @@ class LocalStorageService {
     }
     products[index] = updatedProduct
     this.saveProducts(products)
+
+    console.log("✅ Product updated successfully:", updatedProduct.name)
     return updatedProduct
   }
 
   static async deleteProduct(id: string): Promise<void> {
     const products = this.getProducts()
     const filtered = products.filter((p) => p.id !== id)
+
+    if (products.length === filtered.length) {
+      throw new Error(`Product with ID ${id} not found`)
+    }
+
     this.saveProducts(filtered)
+    console.log("✅ Product deleted successfully")
   }
 
   static async getProductByBarcode(barcode: string): Promise<Product | null> {
     const products = this.getProducts()
-    return products.find((p) => p.barcode === barcode) || null
+    const product = products.find((p) => p.barcode === barcode)
+    console.log(`🔍 Barcode lookup for ${barcode}:`, product ? "Found" : "Not found")
+    return product || null
   }
 
   static getBills(): Bill[] {
-    if (typeof window === "undefined") return []
+    if (!this.isAvailable()) return []
     try {
       const data = localStorage.getItem(this.BILLS_KEY)
       const bills = data ? JSON.parse(data) : []
@@ -237,7 +301,7 @@ class LocalStorageService {
         createdAt: new Date(b.createdAt),
       }))
     } catch (error) {
-      console.error("Error reading bills from localStorage:", error)
+      console.error("❌ Error reading bills from localStorage:", error)
       return []
     }
   }
@@ -249,12 +313,15 @@ class LocalStorageService {
       id: this.generateId(),
       createdAt: new Date(),
     }
-    bills.unshift(newBill) // Add to beginning
+    bills.unshift(newBill)
+
     try {
       localStorage.setItem(this.BILLS_KEY, JSON.stringify(bills))
+      console.log("✅ Bill created successfully")
     } catch (error) {
-      console.error("Error saving bill to localStorage:", error)
+      console.error("❌ Error saving bill to localStorage:", error)
     }
+
     return newBill
   }
 
@@ -267,57 +334,104 @@ class LocalStorageService {
   }
 
   static clearAllData(): void {
-    if (typeof window === "undefined") return
+    if (!this.isAvailable()) return
     localStorage.removeItem(this.PRODUCTS_KEY)
     localStorage.removeItem(this.BILLS_KEY)
     localStorage.removeItem(this.DEMO_LOADED_KEY)
-    console.log("Cleared all data from localStorage")
+    console.log("🗑️ Cleared all data from localStorage")
   }
 
   static reloadDemoProducts(): void {
-    if (typeof window === "undefined") return
+    if (!this.isAvailable()) return
     localStorage.removeItem(this.DEMO_LOADED_KEY)
+    localStorage.removeItem(this.PRODUCTS_KEY)
     this.loadDemoProducts()
+    console.log("🔄 Demo products reloaded")
+  }
+
+  static getDebugInfo(): any {
+    return {
+      isAvailable: this.isAvailable(),
+      productsCount: this.getProducts().length,
+      billsCount: this.getBills().length,
+      demoLoaded: !!localStorage.getItem(this.DEMO_LOADED_KEY),
+      storageUsed: this.getStorageSize(),
+    }
+  }
+
+  private static getStorageSize(): string {
+    if (!this.isAvailable()) return "0 KB"
+    let total = 0
+    for (const key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        total += localStorage[key].length + key.length
+      }
+    }
+    return `${(total / 1024).toFixed(2)} KB`
   }
 }
 
 export class DatabaseService {
   // Initialize demo products on first load
   static async initialize(): Promise<void> {
+    console.log("🚀 Initializing database service...")
+
     if (typeof window !== "undefined") {
       LocalStorageService.loadDemoProducts()
+    }
+
+    // Test Supabase connection if available
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from("products").select("count", { count: "exact" }).limit(1)
+        if (error) {
+          console.warn("⚠️ Supabase connection test failed:", error.message)
+        } else {
+          console.log("✅ Supabase connection successful")
+        }
+      } catch (error) {
+        console.warn("⚠️ Supabase connection test error:", error)
+      }
     }
   }
 
   // Products
   static async getProducts(): Promise<Product[]> {
+    console.log("📦 Getting products...")
+
     if (!supabase) {
-      console.log("Using localStorage for products")
+      console.log("📱 Using localStorage for products")
       return LocalStorageService.getProducts()
     }
 
     try {
+      console.log("☁️ Attempting to fetch from Supabase...")
       const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false })
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.getProducts()
       }
 
-      return data?.map(this.mapProduct) || []
+      const products = data?.map(this.mapProduct) || []
+      console.log(`✅ Retrieved ${products.length} products from Supabase`)
+      return products
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.getProducts()
     }
   }
 
   static async createProduct(product: Omit<Product, "id" | "createdAt" | "updatedAt">): Promise<Product> {
+    console.log("🔄 Creating product:", product.name)
+
     if (!supabase) {
-      console.log("Using localStorage for product creation")
+      console.log("📱 Using localStorage for product creation")
       return LocalStorageService.createProduct(product)
     }
 
     try {
+      console.log("☁️ Attempting to create in Supabase...")
       const { data, error } = await supabase
         .from("products")
         .insert([
@@ -335,13 +449,15 @@ export class DatabaseService {
         .single()
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.createProduct(product)
       }
 
-      return this.mapProduct(data)
+      const newProduct = this.mapProduct(data)
+      console.log("✅ Product created in Supabase:", newProduct.id)
+      return newProduct
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.createProduct(product)
     }
   }
@@ -369,13 +485,13 @@ export class DatabaseService {
         .single()
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.updateProduct(id, updates)
       }
 
       return this.mapProduct(data)
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.updateProduct(id, updates)
     }
   }
@@ -389,11 +505,11 @@ export class DatabaseService {
       const { error } = await supabase.from("products").delete().eq("id", id)
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.deleteProduct(id)
       }
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.deleteProduct(id)
     }
   }
@@ -407,13 +523,13 @@ export class DatabaseService {
       const { data, error } = await supabase.from("products").select("*").eq("barcode", barcode).single()
 
       if (error && error.code !== "PGRST116") {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.getProductByBarcode(barcode)
       }
 
       return data ? this.mapProduct(data) : null
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.getProductByBarcode(barcode)
     }
   }
@@ -439,13 +555,13 @@ export class DatabaseService {
         .single()
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.createBill(bill)
       }
 
       return this.mapBill(data)
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.createBill(bill)
     }
   }
@@ -459,13 +575,13 @@ export class DatabaseService {
       const { data, error } = await supabase.from("bills").select("*").order("created_at", { ascending: false })
 
       if (error) {
-        console.error("Supabase error, falling back to localStorage:", error)
+        console.error("❌ Supabase error, falling back to localStorage:", error)
         return LocalStorageService.getBills()
       }
 
       return data?.map(this.mapBill) || []
     } catch (error) {
-      console.error("Database error, falling back to localStorage:", error)
+      console.error("❌ Database error, falling back to localStorage:", error)
       return LocalStorageService.getBills()
     }
   }
@@ -506,13 +622,20 @@ export class DatabaseService {
     return LocalStorageService.generateId()
   }
 
-  // Demo and utility methods
+  // Debug and utility methods
   static clearAllData(): void {
     LocalStorageService.clearAllData()
   }
 
   static reloadDemoProducts(): void {
     LocalStorageService.reloadDemoProducts()
+  }
+
+  static getDebugInfo(): any {
+    return {
+      supabaseConfigured: !!supabase,
+      localStorage: LocalStorageService.getDebugInfo(),
+    }
   }
 }
 

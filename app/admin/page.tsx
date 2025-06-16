@@ -10,13 +10,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, Printer, RefreshCw, Database, RotateCcw } from "lucide-react"
+import { Plus, Edit, Trash2, Package, Printer, RefreshCw, RotateCcw } from "lucide-react"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
 import { db } from "@/lib/database"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
+import DebugPanel from "@/components/debug-panel"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -39,7 +40,7 @@ export default function AdminPage() {
 
     // Listen for storage changes
     const handleStorageChange = () => {
-      console.log("Storage changed, refreshing products...")
+      console.log("🔄 Storage changed, refreshing products...")
       fetchProducts()
     }
 
@@ -51,23 +52,24 @@ export default function AdminPage() {
 
   const initializeAndFetch = async () => {
     try {
+      console.log("🚀 Initializing admin panel...")
       await db.initialize()
       await fetchProducts()
     } catch (error) {
-      console.error("Error initializing:", error)
+      console.error("❌ Error initializing:", error)
     }
   }
 
   const fetchProducts = async () => {
     try {
       setIsLoading(true)
-      console.log("Fetching products from database...")
+      console.log("📦 Fetching products directly from database...")
 
       const data = await db.getProducts()
-      console.log("Fetched products:", data.length)
+      console.log(`✅ Loaded ${data.length} products`)
       setProducts(data)
     } catch (error) {
-      console.error("Error fetching products:", error)
+      console.error("❌ Error fetching products:", error)
       toast({
         title: "Error",
         description: "Failed to load products",
@@ -119,23 +121,25 @@ export default function AdminPage() {
       soldQuantity: editingProduct?.soldQuantity || 0,
     }
 
-    console.log("Creating product with data:", productData)
+    console.log("🔄 Submitting product:", productData)
 
     try {
       setIsSubmitting(true)
 
       let result: Product
       if (editingProduct) {
+        console.log("✏️ Updating existing product...")
         result = await db.updateProduct(editingProduct.id, productData)
       } else {
+        console.log("➕ Creating new product...")
         result = await db.createProduct(productData)
       }
 
-      console.log("Product operation successful:", result)
+      console.log("✅ Product operation successful:", result)
 
       toast({
         title: "Success!",
-        description: `Product ${editingProduct ? "updated" : "created"} successfully`,
+        description: `Product ${editingProduct ? "updated" : "created"} successfully: ${result.name}`,
       })
 
       // Immediately refresh the products list
@@ -143,7 +147,7 @@ export default function AdminPage() {
       resetForm()
       setIsDialogOpen(false)
     } catch (error) {
-      console.error("Error saving product:", error)
+      console.error("❌ Error saving product:", error)
       toast({
         title: "Error",
         description: `Failed to ${editingProduct ? "update" : "create"} product: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -155,6 +159,7 @@ export default function AdminPage() {
   }
 
   const handleEdit = (product: Product) => {
+    console.log("✏️ Editing product:", product.name)
     setEditingProduct(product)
     setFormData({
       name: product.name,
@@ -167,10 +172,13 @@ export default function AdminPage() {
   }
 
   const handleDelete = async (productId: string) => {
-    if (!confirm("Are you sure you want to delete this product?")) return
+    const product = products.find((p) => p.id === productId)
+    if (!confirm(`Are you sure you want to delete "${product?.name}"?`)) return
 
     try {
       setIsLoading(true)
+      console.log("🗑️ Deleting product:", productId)
+
       await db.deleteProduct(productId)
 
       toast({
@@ -180,7 +188,7 @@ export default function AdminPage() {
 
       await fetchProducts()
     } catch (error) {
-      console.error("Error deleting product:", error)
+      console.error("❌ Error deleting product:", error)
       toast({
         title: "Error",
         description: `Failed to delete product: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -196,14 +204,17 @@ export default function AdminPage() {
 
     try {
       setIsLoading(true)
+      console.log("🔄 Reloading demo products...")
+
       db.reloadDemoProducts()
       await fetchProducts()
+
       toast({
         title: "Success",
         description: "Demo products reloaded successfully",
       })
     } catch (error) {
-      console.error("Error reloading demo:", error)
+      console.error("❌ Error reloading demo:", error)
       toast({
         title: "Error",
         description: "Failed to reload demo products",
@@ -379,7 +390,7 @@ export default function AdminPage() {
                         Add Product
                       </Button>
                       <Button onClick={handleReloadDemo} variant="outline">
-                        <Database className="h-4 w-4 mr-2" />
+                        <RotateCcw className="h-4 w-4 mr-2" />
                         Load Demo Products
                       </Button>
                     </div>
@@ -451,6 +462,8 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      <DebugPanel />
     </div>
   )
 }
