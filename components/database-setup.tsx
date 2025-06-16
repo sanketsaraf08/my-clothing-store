@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Database, Server, Cloud, HardDrive, CheckCircle, AlertCircle } from "lucide-react"
+import NeonSetupGuide from "@/components/neon-setup-guide"
 
 export default function DatabaseSetup() {
   const [selectedDb, setSelectedDb] = useState<string>("")
@@ -110,6 +111,12 @@ export default function DatabaseSetup() {
                   <h4 className="font-medium text-sm text-gray-700 mb-1">Setup:</h4>
                   <p className="text-sm text-gray-600">{db.setup}</p>
                 </div>
+
+                {db.id === "neon" && (
+                  <div className="pt-2">
+                    <NeonSetupGuide />
+                  </div>
+                )}
 
                 {db.envVars.length > 0 && (
                   <div>

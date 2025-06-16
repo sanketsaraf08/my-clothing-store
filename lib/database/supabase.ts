@@ -78,8 +78,11 @@ export class SupabaseService {
         {
           items: bill.items,
           total: bill.total,
+          subtotal: bill.subtotal || bill.total,
+          discount: bill.discount || 0,
           customer_phone: bill.customerPhone,
           qr_code: bill.qrCode,
+          upi_id: bill.upiId,
         },
       ])
       .select()
@@ -117,8 +120,11 @@ export class SupabaseService {
       id: data.id,
       items: data.items,
       total: data.total,
+      subtotal: data.subtotal || data.total,
+      discount: data.discount || 0,
       customerPhone: data.customer_phone,
       qrCode: data.qr_code,
+      upiId: data.upi_id,
       createdAt: new Date(data.created_at),
     }
   }

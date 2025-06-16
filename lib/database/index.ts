@@ -3,6 +3,7 @@ import { SupabaseService } from "./supabase"
 import { NeonService } from "./neon"
 import { MongoDBService } from "./mongodb"
 import { StorageService } from "@/lib/storage"
+import { smartDb } from "./smart-service"
 import type { Product, Bill } from "@/lib/types"
 
 // Universal database interface
@@ -83,4 +84,7 @@ export function getDatabaseService(): DatabaseService {
 }
 
 // Convenience export
-export const db = getDatabaseService()
+export const db = smartDb
+
+// Re-export types
+export type { DatabaseService } from "./smart-service"
