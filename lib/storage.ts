@@ -191,28 +191,4 @@ export class StorageService {
       totalSoldValue: products.reduce((sum, p) => sum + p.soldQuantity * p.price, 0),
     }
   }
-
-  // Clear all data
-  static clearAll(): void {
-    if (typeof window === "undefined") return
-    try {
-      localStorage.removeItem(this.PRODUCTS_KEY)
-      localStorage.removeItem(this.CART_KEY)
-      localStorage.removeItem(this.BILLS_KEY)
-      localStorage.removeItem(this.BARCODE_COUNTER_KEY)
-      console.log("🗑️ All data cleared")
-    } catch (error) {
-      console.error("Error clearing storage:", error)
-    }
-  }
-
-  // Force reload demo products
-  static reloadDemoProducts(): void {
-    console.log("🔄 Reloading demo products...")
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(this.PRODUCTS_KEY)
-      this.getDefaultProducts()
-    }
-    console.log("✅ Demo products reloaded")
-  }
 }
