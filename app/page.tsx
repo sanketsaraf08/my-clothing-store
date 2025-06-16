@@ -208,11 +208,11 @@ export default function StorePage() {
   const getSyncIcon = () => {
     switch (syncStatus) {
       case "online":
-        return <Cloud className="h-4 w-4 text-green-500" />
+        return <Cloud className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
       case "syncing":
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
+        return <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500 animate-spin" />
       case "offline":
-        return <CloudOff className="h-4 w-4 text-red-500" />
+        return <CloudOff className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
     }
   }
 
@@ -246,43 +246,47 @@ export default function StorePage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navigation />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="text-center mb-6">
-            <div className="text-4xl mb-2">🕉️</div>
-            <h1 className="text-3xl font-bold text-blue-900 mb-2">Moraya Fashion</h1>
-            <p className="text-blue-700">Ganpati Bappa Morya • Premium Fashion Collection</p>
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
+        <div className="mb-6 sm:mb-8">
+          <div className="text-center mb-4 sm:mb-6">
+            <div className="text-3xl sm:text-4xl mb-2">🕉️</div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-blue-900 mb-2">Moraya Fashion</h1>
+            <p className="text-sm sm:text-base text-blue-700">Ganpati Bappa Morya • Premium Fashion Collection</p>
             <div className="flex items-center justify-center gap-2 mt-2">
               {getSyncIcon()}
-              <span className="text-sm text-gray-600">{getSyncText()}</span>
-              {lastSync && <span className="text-xs text-gray-500">• Last sync: {lastSync.toLocaleTimeString()}</span>}
+              <span className="text-xs sm:text-sm text-gray-600">{getSyncText()}</span>
+              {lastSync && (
+                <span className="text-xs text-gray-500 hidden sm:inline">
+                  • Last sync: {lastSync.toLocaleTimeString()}
+                </span>
+              )}
             </div>
           </div>
 
           {/* System Status Alert */}
           {systemStatus === "error" && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                <h3 className="font-medium text-red-900">System Error</h3>
+                <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+                <h3 className="font-medium text-red-900 text-sm sm:text-base">System Error</h3>
               </div>
-              <p className="text-red-700 mt-1">
+              <p className="text-red-700 mt-1 text-sm">
                 Unable to load products. Check your internet connection and try refreshing.
               </p>
             </div>
           )}
 
           {systemStatus === "warning" && products.length === 0 && (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center justify-between">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                  <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
                   <div>
-                    <h3 className="font-medium text-yellow-900">No Products Available</h3>
-                    <p className="text-yellow-700 text-sm">Load demo products to get started</p>
+                    <h3 className="font-medium text-yellow-900 text-sm sm:text-base">No Products Available</h3>
+                    <p className="text-yellow-700 text-xs sm:text-sm">Load demo products to get started</p>
                   </div>
                 </div>
-                <Button onClick={handleReloadDemo} variant="outline" className="bg-white">
+                <Button onClick={handleReloadDemo} variant="outline" className="bg-white text-sm">
                   Load Demo Products
                 </Button>
               </div>
@@ -291,58 +295,61 @@ export default function StorePage() {
 
           {/* Multi-Device Sync Info */}
           {products.length > 0 && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <Cloud className="h-5 w-5 text-blue-500" />
-                <h3 className="font-medium text-blue-900">Multi-Device Sync Active</h3>
+                <Cloud className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
+                <h3 className="font-medium text-blue-900 text-sm sm:text-base">Multi-Device Sync Active</h3>
               </div>
-              <p className="text-blue-700 mt-1">
+              <p className="text-blue-700 mt-1 text-xs sm:text-sm">
                 Products sync across all your devices automatically. Changes appear within 10 seconds!
               </p>
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          {/* Mobile-optimized search and filters */}
+          <div className="space-y-3 sm:space-y-0 sm:flex sm:gap-4 mb-4 sm:mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-400 h-4 w-4" />
               <Input
                 placeholder="Search products or scan barcode..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 border-blue-200 focus:border-blue-400"
+                className="pl-10 border-blue-200 focus:border-blue-400 text-sm sm:text-base"
               />
             </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-full sm:w-48 border-blue-200">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category === "all" ? "All Categories" : category.charAt(0).toUpperCase() + category.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={forceSync} variant="outline" className="bg-white">
-              <Cloud className="h-4 w-4 mr-2" />
-              Sync
-            </Button>
-            <Button onClick={fetchProducts} variant="outline" className="bg-white">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex gap-2 sm:gap-4">
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="flex-1 sm:w-48 border-blue-200 text-sm">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category === "all" ? "All Categories" : category.charAt(0).toUpperCase() + category.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={forceSync} variant="outline" className="bg-white" size="sm">
+                <Cloud className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sync</span>
+              </Button>
+              <Button onClick={fetchProducts} variant="outline" className="bg-white" size="sm">
+                <RefreshCw className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            </div>
           </div>
         </div>
 
         {filteredProducts.length === 0 ? (
           <Card className="border-blue-200 shadow-lg">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Package className="h-12 w-12 text-blue-400 mb-4" />
+            <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
+              <Package className="h-10 w-10 sm:h-12 sm:w-12 text-blue-400 mb-4" />
               <h3 className="text-lg font-medium text-blue-900 mb-2">
                 {products.length === 0 ? "No products available" : "No products found"}
               </h3>
-              <p className="text-blue-600 mb-4">
+              <p className="text-blue-600 mb-4 text-center text-sm sm:text-base">
                 {products.length === 0
                   ? "Load demo products or add products in the admin panel"
                   : "Try adjusting your search or filter criteria"}
@@ -356,7 +363,7 @@ export default function StorePage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map((product) => (
               <Card
                 key={product.id}
@@ -374,38 +381,40 @@ export default function StorePage() {
                       }}
                     />
                   ) : null}
-                  <Package className={`h-16 w-16 text-blue-400 ${product.image ? "hidden" : ""}`} />
+                  <Package className={`h-12 w-12 sm:h-16 sm:w-16 text-blue-400 ${product.image ? "hidden" : ""}`} />
                 </div>
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg line-clamp-2 text-blue-900">{product.name}</CardTitle>
+                <CardHeader className="pb-2 p-3 sm:p-6">
+                  <div className="flex justify-between items-start gap-2">
+                    <CardTitle className="text-sm sm:text-lg line-clamp-2 text-blue-900">{product.name}</CardTitle>
                     <Badge
                       variant={product.quantity > 0 ? "default" : "destructive"}
-                      className="bg-blue-100 text-blue-800"
+                      className="bg-blue-100 text-blue-800 text-xs shrink-0"
                     >
-                      {product.quantity > 0 ? `${product.quantity} in stock` : "Out of stock"}
+                      {product.quantity > 0 ? `${product.quantity}` : "Out"}
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
+                <CardContent className="p-3 sm:p-6 pt-0">
+                  <div className="space-y-2 sm:space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-2xl font-bold text-blue-600">{formatCurrency(product.price)}</span>
-                      <Badge variant="outline" className="border-blue-200 text-blue-700">
+                      <span className="text-lg sm:text-2xl font-bold text-blue-600">
+                        {formatCurrency(product.price)}
+                      </span>
+                      <Badge variant="outline" className="border-blue-200 text-blue-700 text-xs">
                         {product.category}
                       </Badge>
                     </div>
-                    <p className="text-sm text-blue-600 font-mono">Barcode: {product.barcode}</p>
-                    <p className="text-sm text-blue-600">
+                    <p className="text-xs sm:text-sm text-blue-600 font-mono">#{product.barcode}</p>
+                    <p className="text-xs sm:text-sm text-blue-600">
                       Stock: {product.quantity} | Sold: {product.soldQuantity}
                     </p>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Input
                         type="number"
                         step="1"
                         placeholder="Custom price (₹)"
-                        className="text-sm border-blue-200"
+                        className="text-xs sm:text-sm border-blue-200"
                         id={`price-${product.id}`}
                       />
                       <Button
@@ -418,9 +427,10 @@ export default function StorePage() {
                           if (customPriceInput) customPriceInput.value = ""
                         }}
                         disabled={product.quantity === 0}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm"
+                        size="sm"
                       >
-                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         Add to Cart
                       </Button>
                     </div>
@@ -432,15 +442,17 @@ export default function StorePage() {
         )}
       </div>
 
-      {/* Floating Sync Status */}
-      <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-lg border p-3">
-        <div className="flex items-center gap-2">
+      {/* Mobile-optimized Floating Sync Status */}
+      <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 bg-white rounded-lg shadow-lg border p-2 sm:p-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           {getSyncIcon()}
-          <div className="text-sm">
+          <div className="text-xs sm:text-sm">
             <div className="font-medium">{getSyncText()}</div>
-            {lastSync && <div className="text-xs text-gray-500">Last sync: {lastSync.toLocaleTimeString()}</div>}
+            {lastSync && (
+              <div className="text-xs text-gray-500 hidden sm:block">Last: {lastSync.toLocaleTimeString()}</div>
+            )}
           </div>
-          <Button size="sm" variant="outline" onClick={forceSync}>
+          <Button size="sm" variant="outline" onClick={forceSync} className="text-xs px-2">
             Sync
           </Button>
         </div>
