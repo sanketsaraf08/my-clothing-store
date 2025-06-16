@@ -11,7 +11,7 @@ import { ShoppingCart, Search, Package, RefreshCw, AlertCircle } from "lucide-re
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { db } from "@/lib/database/hybrid-service"
+import { db } from "@/lib/database-simple"
 import Navigation from "@/components/navigation"
 
 export default function StorePage() {
@@ -28,16 +28,14 @@ export default function StorePage() {
     initializeStore()
 
     // Listen for storage changes
-    const handleStorageChange = (event: any) => {
-      console.log("📡 STORE PAGE: Storage change detected:", event.detail)
-      if (event.detail?.type === "products") {
-        setProducts(event.detail.data)
-      }
+    const handleStorageChange = () => {
+      console.log("📡 STORE PAGE: Storage change detected")
+      fetchProducts()
     }
 
     if (typeof window !== "undefined") {
-      window.addEventListener("moraya_data_updated", handleStorageChange)
-      return () => window.removeEventListener("moraya_data_updated", handleStorageChange)
+      window.addEventListener("storage", handleStorageChange)
+      return () => window.removeEventListener("storage", handleStorageChange)
     }
   }, [])
 
@@ -68,10 +66,7 @@ export default function StorePage() {
     try {
       console.log("📦 STORE PAGE: Fetching products...")
       const data = await db.getProducts()
-      console.log(
-        `✅ STORE PAGE: Loaded ${data.length} products:`,
-        data.map((p) => p.name),
-      )
+      console.log(`✅ STORE PAGE: Loaded ${data.length} products`)
 
       setProducts(data)
       setError(null)
@@ -220,11 +215,6 @@ export default function StorePage() {
           </div>
         </div>
 
-        {/* Debug Info */}
-        <div className="mb-4 text-xs text-gray-500">
-          Total products: {products.length} | Filtered: {filteredProducts.length}
-        </div>
-
         {filteredProducts.length === 0 ? (
           <Card className="border-blue-200 shadow-lg">
             <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
@@ -242,6 +232,7 @@ export default function StorePage() {
                   Load Demo Products
                 </Button>
               )}
+              <p className="text-sm text-blue-500 mt-2">Total products: {products.length}</p>
             </CardContent>
           </Card>
         ) : (

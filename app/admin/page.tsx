@@ -3,375 +3,165 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import type { Product } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, Printer, RefreshCw, RotateCcw, AlertCircle, Cloud, CloudOff } from "lucide-react"
-import type { Product } from "@/lib/types"
+import { Plus, Edit, Trash2, Package } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { db } from "@/lib/database-new"
+import { db } from "@/lib/database-simple"
 import Navigation from "@/components/navigation"
-import BarcodeSticker from "@/components/barcode-sticker"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [selectedProductForSticker, setSelectedProductForSticker] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [systemStatus, setSystemStatus] = useState<"unknown" | "healthy" | "warning" | "error">("unknown")
-  const [syncStatus, setSyncStatus] = useState<"online" | "offline" | "syncing">("offline")
-  const [lastSync, setLastSync] = useState<Date | null>(null)
   const [formData, setFormData] = useState({
     name: "",
+    barcode: "",
     price: "",
     quantity: "",
-    category: "shirts" as const,
+    category: "",
     image: "",
   })
 
   useEffect(() => {
-    console.log("🚀 ADMIN PAGE: Starting initialization...")
-    initializeSystem()
-
-    // Setup sync polling
-    const syncInterval = setInterval(checkForUpdates, 10000) // Check every 10 seconds
-
-    // Listen for data updates
-    const handleDataUpdate = (event: any) => {
-      console.log("📡 ADMIN PAGE: Data update received:", event.detail)
-      fetchProducts()
-    }
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("moraya_data_updated", handleDataUpdate)
-      window.addEventListener("online", () => setSyncStatus("online"))
-      window.addEventListener("offline", () => setSyncStatus("offline"))
-
-      // Set initial online status
-      setSyncStatus(navigator.onLine ? "online" : "offline")
-
-      return () => {
-        clearInterval(syncInterval)
-        window.removeEventListener("moraya_data_updated", handleDataUpdate)
-        window.removeEventListener("online", () => setSyncStatus("online"))
-        window.removeEventListener("offline", () => setSyncStatus("offline"))
-      }
-    }
+    initializeAndFetch()
   }, [])
 
-  const initializeSystem = async () => {
+  const initializeAndFetch = async () => {
     try {
-      console.log("🔧 ADMIN PAGE: Initializing database...")
       await db.initialize()
-
-      console.log("📦 ADMIN PAGE: Loading products...")
       await fetchProducts()
-
-      setSystemStatus("healthy")
-      console.log("✅ ADMIN PAGE: Initialization complete")
     } catch (error) {
-      console.error("❌ ADMIN PAGE: Initialization failed:", error)
-      setSystemStatus("error")
-
-      toast({
-        title: "System Error",
-        description: "Failed to initialize. Check your connection and try again.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const checkForUpdates = async () => {
-    if (syncStatus === "offline") return
-
-    try {
-      setSyncStatus("syncing")
-      // Simulate cloud sync check
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setLastSync(new Date())
-      setSyncStatus("online")
-    } catch (error) {
-      console.error("Sync check failed:", error)
-      setSyncStatus("offline")
+      console.error("Error initializing admin:", error)
     }
   }
 
   const fetchProducts = async () => {
     try {
-      setIsLoading(true)
-      console.log("📦 ADMIN PAGE: Fetching products...")
-
+      setLoading(true)
       const data = await db.getProducts()
-      console.log(`✅ ADMIN PAGE: Loaded ${data.length} products`)
-
       setProducts(data)
-
-      if (data.length === 0) {
-        setSystemStatus("warning")
-        console.log("⚠️ ADMIN PAGE: No products found")
-      } else {
-        setSystemStatus("healthy")
-      }
     } catch (error) {
-      console.error("❌ ADMIN PAGE: Error fetching products:", error)
-      setSystemStatus("error")
-
+      console.error("Error fetching products:", error)
       toast({
         title: "Error",
-        description: "Failed to load products. Check diagnostics for details.",
+        description: "Failed to load products",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate form data
-    if (!formData.name.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Product name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a valid price",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a valid quantity",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const productData = {
-      name: formData.name.trim(),
-      barcode: editingProduct ? editingProduct.barcode : db.generateBarcode(),
-      price: Number(formData.price),
-      quantity: Number(formData.quantity),
-      category: formData.category,
-      image: formData.image.trim() || undefined,
-      soldQuantity: editingProduct?.soldQuantity || 0,
-    }
-
-    console.log("🔄 ADMIN PAGE: Submitting product:", productData)
-
     try {
-      setIsSubmitting(true)
-      setSyncStatus("syncing")
-
-      let result: Product
-      if (editingProduct) {
-        console.log("✏️ ADMIN PAGE: Updating existing product...")
-        result = await db.updateProduct(editingProduct.id, productData)
-      } else {
-        console.log("➕ ADMIN PAGE: Creating new product...")
-        result = await db.createProduct(productData)
+      const productData = {
+        name: formData.name,
+        barcode: formData.barcode || db.generateBarcode(),
+        price: Number.parseFloat(formData.price),
+        quantity: Number.parseInt(formData.quantity),
+        soldQuantity: 0,
+        category: formData.category as Product["category"],
+        image: formData.image || undefined,
       }
 
-      console.log("✅ ADMIN PAGE: Product operation successful:", result)
+      if (editingProduct) {
+        await db.updateProduct(editingProduct.id, productData)
+        toast({
+          title: "Product Updated",
+          description: `${productData.name} has been updated successfully`,
+        })
+      } else {
+        await db.createProduct(productData)
+        toast({
+          title: "Product Created",
+          description: `${productData.name} has been created successfully`,
+        })
+      }
 
-      toast({
-        title: "Success!",
-        description: `Product ${editingProduct ? "updated" : "created"} and synced across all devices!`,
-      })
-
-      // Immediately refresh the products list
       await fetchProducts()
       resetForm()
       setIsDialogOpen(false)
-
-      // Update sync status
-      setLastSync(new Date())
-      setSyncStatus("online")
     } catch (error) {
-      console.error("❌ ADMIN PAGE: Error saving product:", error)
+      console.error("Error saving product:", error)
       toast({
         title: "Error",
-        description: `Failed to ${editingProduct ? "update" : "create"} product: ${error instanceof Error ? error.message : "Unknown error"}`,
+        description: "Failed to save product",
         variant: "destructive",
       })
-      setSyncStatus("offline")
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   const handleEdit = (product: Product) => {
-    console.log("✏️ ADMIN PAGE: Editing product:", product.name)
     setEditingProduct(product)
     setFormData({
       name: product.name,
+      barcode: product.barcode,
       price: product.price.toString(),
       quantity: product.quantity.toString(),
-      category: product.category as any,
+      category: product.category,
       image: product.image || "",
     })
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async (productId: string) => {
-    const product = products.find((p) => p.id === productId)
-    if (!confirm(`Are you sure you want to delete "${product?.name}"? This will sync across all devices.`)) return
-
-    try {
-      setIsLoading(true)
-      setSyncStatus("syncing")
-      console.log("🗑️ ADMIN PAGE: Deleting product:", productId)
-
-      await db.deleteProduct(productId)
-
-      toast({
-        title: "Success",
-        description: "Product deleted and synced across all devices",
-      })
-
-      await fetchProducts()
-      setLastSync(new Date())
-      setSyncStatus("online")
-    } catch (error) {
-      console.error("❌ ADMIN PAGE: Error deleting product:", error)
-      toast({
-        title: "Error",
-        description: `Failed to delete product: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      })
-      setSyncStatus("offline")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleReloadDemo = async () => {
-    if (!confirm("This will reload demo products and sync across all devices. Continue?")) return
-
-    try {
-      setIsLoading(true)
-      setSyncStatus("syncing")
-      console.log("🔄 ADMIN PAGE: Reloading demo products...")
-
-      db.reloadDemoProducts()
-      await fetchProducts()
-
-      toast({
-        title: "Success",
-        description: "Demo products reloaded and synced across all devices",
-      })
-
-      setLastSync(new Date())
-      setSyncStatus("online")
-    } catch (error) {
-      console.error("❌ ADMIN PAGE: Error reloading demo:", error)
-      toast({
-        title: "Error",
-        description: "Failed to reload demo products",
-        variant: "destructive",
-      })
-      setSyncStatus("offline")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const forceSync = async () => {
-    try {
-      setSyncStatus("syncing")
-      await fetchProducts()
-      setLastSync(new Date())
-      setSyncStatus("online")
-      toast({
-        title: "Sync Complete",
-        description: "All devices are now synchronized",
-      })
-    } catch (error) {
-      setSyncStatus("offline")
-      toast({
-        title: "Sync Failed",
-        description: "Unable to sync. Check your connection.",
-        variant: "destructive",
-      })
+  const handleDelete = async (product: Product) => {
+    if (confirm(`Are you sure you want to delete "${product.name}"?`)) {
+      try {
+        await db.deleteProduct(product.id)
+        await fetchProducts()
+        toast({
+          title: "Product Deleted",
+          description: `${product.name} has been deleted`,
+        })
+      } catch (error) {
+        console.error("Error deleting product:", error)
+        toast({
+          title: "Error",
+          description: "Failed to delete product",
+          variant: "destructive",
+        })
+      }
     }
   }
 
   const resetForm = () => {
     setFormData({
       name: "",
+      barcode: "",
       price: "",
       quantity: "",
-      category: "shirts",
+      category: "",
       image: "",
     })
     setEditingProduct(null)
   }
 
-  const categories = ["shirts", "pants", "dresses", "shoes", "accessories"]
-
-  const getStatusColor = () => {
-    switch (systemStatus) {
-      case "healthy":
-        return "text-green-600"
-      case "warning":
-        return "text-yellow-600"
-      case "error":
-        return "text-red-600"
-      default:
-        return "text-gray-600"
-    }
+  const handleDialogClose = () => {
+    setIsDialogOpen(false)
+    resetForm()
   }
 
-  const getStatusText = () => {
-    switch (systemStatus) {
-      case "healthy":
-        return "System Healthy"
-      case "warning":
-        return "System Warning"
-      case "error":
-        return "System Error"
-      default:
-        return "System Unknown"
-    }
-  }
-
-  const getSyncIcon = () => {
-    switch (syncStatus) {
-      case "online":
-        return <Cloud className="h-4 w-4 text-green-500" />
-      case "syncing":
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
-      case "offline":
-        return <CloudOff className="h-4 w-4 text-red-500" />
-    }
-  }
-
-  const getSyncText = () => {
-    switch (syncStatus) {
-      case "online":
-        return "Online & Synced"
-      case "syncing":
-        return "Syncing..."
-      case "offline":
-        return "Offline"
-    }
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Navigation />
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -380,293 +170,202 @@ export default function AdminPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-blue-900 mb-2">Admin Panel</h1>
-              <div className="flex items-center gap-4">
-                <p className="text-blue-700">Manage your product inventory</p>
-                <span className={`text-sm font-medium ${getStatusColor()}`}>• {getStatusText()}</span>
-                <div className="flex items-center gap-2 text-sm">
-                  {getSyncIcon()}
-                  <span className="text-gray-600">{getSyncText()}</span>
-                  {lastSync && (
-                    <span className="text-xs text-gray-500">Last sync: {lastSync.toLocaleTimeString()}</span>
-                  )}
-                </div>
-              </div>
+              <h1 className="text-3xl font-bold text-blue-900">Product Management</h1>
+              <p className="text-blue-700">Manage your store inventory</p>
             </div>
 
-            <div className="flex gap-2">
-              <Button onClick={forceSync} variant="outline" disabled={isLoading} className="bg-white">
-                <Cloud className="h-4 w-4 mr-2" />
-                Force Sync
-              </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setIsDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Product
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="name">Product Name</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
 
-              <Button onClick={fetchProducts} variant="outline" disabled={isLoading} className="bg-white">
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+                  <div>
+                    <Label htmlFor="barcode">Barcode (optional)</Label>
+                    <Input
+                      id="barcode"
+                      value={formData.barcode}
+                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                      placeholder="Auto-generated if empty"
+                    />
+                  </div>
 
-              <Button onClick={handleReloadDemo} variant="outline" disabled={isLoading} className="bg-white">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reload Demo
-              </Button>
-
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={resetForm} className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Product
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle className="text-blue-900">
-                      {editingProduct ? "Edit Product" : "Add New Product"}
-                    </DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="name">Product Name *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                        placeholder="Enter product name"
-                      />
-                    </div>
-
-                    {editingProduct && (
-                      <div>
-                        <Label>Barcode (Auto-generated)</Label>
-                        <Input value={editingProduct.barcode} disabled className="bg-gray-100" />
-                      </div>
-                    )}
-
-                    <div>
-                      <Label htmlFor="price">Price (₹) *</Label>
+                      <Label htmlFor="price">Price (₹)</Label>
                       <Input
                         id="price"
                         type="number"
-                        step="1"
-                        min="0"
+                        step="0.01"
                         value={formData.price}
                         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                         required
-                        placeholder="Enter price"
                       />
                     </div>
-
                     <div>
-                      <Label htmlFor="quantity">Quantity *</Label>
+                      <Label htmlFor="quantity">Quantity</Label>
                       <Input
                         id="quantity"
                         type="number"
-                        min="0"
                         value={formData.quantity}
                         onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                         required
-                        placeholder="Enter quantity"
                       />
                     </div>
+                  </div>
 
-                    <div>
-                      <Label htmlFor="category">Category *</Label>
-                      <Select
-                        value={formData.category}
-                        onValueChange={(value) => setFormData({ ...formData, category: value as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category.charAt(0).toUpperCase() + category.slice(1)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div>
+                    <Label htmlFor="category">Category</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="shirts">Shirts</SelectItem>
+                        <SelectItem value="pants">Pants</SelectItem>
+                        <SelectItem value="dresses">Dresses</SelectItem>
+                        <SelectItem value="shoes">Shoes</SelectItem>
+                        <SelectItem value="accessories">Accessories</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    <div>
-                      <Label htmlFor="image">Product Image URL</Label>
-                      <Input
-                        id="image"
-                        value={formData.image}
-                        onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                        placeholder="Enter image URL (optional)"
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="image">Image URL (optional)</Label>
+                    <Input
+                      id="image"
+                      type="url"
+                      value={formData.image}
+                      onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                      placeholder="https://example.com/image.jpg"
+                    />
+                  </div>
 
-                    <div className="flex gap-2">
-                      <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
-                        {isSubmitting ? "Saving & Syncing..." : editingProduct ? "Update" : "Create"} Product
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setIsDialogOpen(false)}
-                        disabled={isSubmitting}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700">
+                      {editingProduct ? "Update Product" : "Create Product"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handleDialogClose}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
-        {/* System Status Alert */}
-        {systemStatus === "error" && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              <h3 className="font-medium text-red-900">System Error Detected</h3>
-            </div>
-            <p className="text-red-700 mt-1">
-              The system is experiencing issues. Check your internet connection and try refreshing.
-            </p>
-          </div>
-        )}
-
-        {systemStatus === "warning" && products.length === 0 && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
-              <h3 className="font-medium text-yellow-900">No Products Found</h3>
-            </div>
-            <p className="text-yellow-700 mt-1">
-              No products are currently loaded. Click "Reload Demo" to load sample products or add your first product.
-            </p>
-          </div>
-        )}
-
-        {/* Multi-Device Sync Info */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Cloud className="h-5 w-5 text-blue-500" />
-            <h3 className="font-medium text-blue-900">Multi-Device Sync Active</h3>
-          </div>
-          <p className="text-blue-700 mt-1">
-            All changes sync across devices automatically. Add a product here and see it appear on other devices within
-            10 seconds!
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card className="border-blue-200 shadow-lg">
-              <CardHeader className="bg-blue-50">
-                <CardTitle className="flex items-center gap-2 text-blue-900">
-                  <Package className="h-5 w-5" />
-                  Product Inventory ({products.length}){isLoading && <RefreshCw className="h-4 w-4 animate-spin" />}
-                  <div className="ml-auto flex items-center gap-2">
-                    {getSyncIcon()}
-                    <span className="text-sm text-gray-600">{getSyncText()}</span>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {products.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-blue-900 mb-2">No products found</h3>
-                    <p className="text-blue-600 mb-4">Add your first product or reload demo products</p>
-                    <div className="flex gap-2 justify-center">
-                      <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Product
-                      </Button>
-                      <Button onClick={handleReloadDemo} variant="outline">
-                        <RotateCcw className="h-4 w-4 mr-2" />
-                        Load Demo Products
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Barcode</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Price</TableHead>
-                          <TableHead>Quantity</TableHead>
-                          <TableHead>Sold Qty</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {products.map((product) => (
-                          <TableRow key={product.id}>
-                            <TableCell className="font-medium">{product.name}</TableCell>
-                            <TableCell className="font-mono text-sm">{product.barcode}</TableCell>
-                            <TableCell className="capitalize">{product.category}</TableCell>
-                            <TableCell>{formatCurrency(product.price)}</TableCell>
-                            <TableCell>
-                              <span className={product.quantity < 10 ? "text-red-600 font-medium" : ""}>
-                                {product.quantity}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-green-600 font-medium">{product.soldQuantity}</span>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleEdit(product)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setSelectedProductForSticker(product)}
-                                  className="text-blue-600 hover:text-blue-700"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDelete(product.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+        {products.length === 0 ? (
+          <Card className="border-blue-200 shadow-lg">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Package className="h-12 w-12 text-blue-400 mb-4" />
+              <h3 className="text-lg font-medium text-blue-900 mb-2">No products yet</h3>
+              <p className="text-blue-600 mb-4">Start by adding your first product</p>
+              <Button onClick={() => setIsDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Product
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-blue-200 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-blue-900">Products ({products.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Barcode</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Stock</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {products.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            {product.image ? (
+                              <img
+                                src={product.image || "/placeholder.svg"}
+                                alt={product.name}
+                                className="w-10 h-10 rounded object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none"
+                                }}
+                              />
+                            ) : (
+                              <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center">
+                                <Package className="h-5 w-5 text-blue-500" />
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            {selectedProductForSticker && (
-              <div>
-                <h3 className="text-lg font-semibold text-blue-900 mb-4">Barcode Sticker Preview</h3>
-                <BarcodeSticker product={selectedProductForSticker} />
+                            )}
+                            <div>
+                              <div className="font-medium text-blue-900">{product.name}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-sm bg-blue-50 px-2 py-1 rounded">{product.barcode}</code>
+                        </TableCell>
+                        <TableCell className="font-medium">{formatCurrency(product.price)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              product.quantity > 10 ? "default" : product.quantity > 0 ? "secondary" : "destructive"
+                            }
+                          >
+                            {product.quantity} in stock
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {product.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleEdit(product)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDelete(product)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Floating Sync Status */}
-      <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-lg border p-3">
-        <div className="flex items-center gap-2">
-          {getSyncIcon()}
-          <div className="text-sm">
-            <div className="font-medium">{getSyncText()}</div>
-            {lastSync && <div className="text-xs text-gray-500">Last sync: {lastSync.toLocaleTimeString()}</div>}
-          </div>
-          <Button size="sm" variant="outline" onClick={forceSync}>
-            Sync
-          </Button>
-        </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
