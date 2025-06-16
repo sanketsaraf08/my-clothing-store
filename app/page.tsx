@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Search, Package, RefreshCw, AlertCircle, Cloud, CloudOff } from "lucide-react"
+import { ShoppingCart, Search, Package, RefreshCw } from "lucide-react"
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { db } from "@/lib/database-new"
+import { db } from "@/lib/database/hybrid-service"
 import Navigation from "@/components/navigation"
 
 export default function StorePage() {
@@ -20,99 +20,42 @@ export default function StorePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
-  const [systemStatus, setSystemStatus] = useState<"unknown" | "healthy" | "warning" | "error">("unknown")
-  const [syncStatus, setSyncStatus] = useState<"online" | "offline" | "syncing">("offline")
-  const [lastSync, setLastSync] = useState<Date | null>(null)
   const { dispatch } = useCart()
 
   useEffect(() => {
-    console.log("🚀 STORE PAGE: Starting initialization...")
     initializeStore()
 
-    // Setup sync polling
-    const syncInterval = setInterval(checkForUpdates, 10000) // Check every 10 seconds
+    // Subscribe to real-time updates
+    const unsubscribe = db.subscribeToProducts((updatedProducts) => {
+      setProducts(updatedProducts)
+    })
 
-    // Listen for data updates
-    const handleDataUpdate = (event: any) => {
-      console.log("📡 STORE PAGE: Data update received:", event.detail)
-      fetchProducts()
-    }
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("moraya_data_updated", handleDataUpdate)
-      window.addEventListener("online", () => setSyncStatus("online"))
-      window.addEventListener("offline", () => setSyncStatus("offline"))
-
-      // Set initial online status
-      setSyncStatus(navigator.onLine ? "online" : "offline")
-
-      return () => {
-        clearInterval(syncInterval)
-        window.removeEventListener("moraya_data_updated", handleDataUpdate)
-        window.removeEventListener("online", () => setSyncStatus("online"))
-        window.removeEventListener("offline", () => setSyncStatus("offline"))
-      }
-    }
+    return unsubscribe
   }, [])
 
   useEffect(() => {
     filterProducts()
   }, [products, searchTerm, selectedCategory])
 
-  const checkForUpdates = async () => {
-    if (syncStatus === "offline") return
-
-    try {
-      setSyncStatus("syncing")
-      // Simulate cloud sync check
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setLastSync(new Date())
-      setSyncStatus("online")
-    } catch (error) {
-      console.error("Sync check failed:", error)
-      setSyncStatus("offline")
-    }
-  }
-
   const initializeStore = async () => {
     try {
-      console.log("🔧 STORE PAGE: Initializing database...")
       await db.initialize()
-
-      console.log("📦 STORE PAGE: Loading products...")
       await fetchProducts()
-
-      setSystemStatus("healthy")
-      console.log("✅ STORE PAGE: Initialization complete")
     } catch (error) {
-      console.error("❌ STORE PAGE: Initialization failed:", error)
-      setSystemStatus("error")
+      console.error("Failed to initialize store:", error)
     }
   }
 
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      console.log("📦 STORE PAGE: Fetching products...")
-
       const data = await db.getProducts()
-      console.log(`✅ STORE PAGE: Loaded ${data.length} products`)
-
       setProducts(data)
-
-      if (data.length === 0) {
-        setSystemStatus("warning")
-        console.log("⚠️ STORE PAGE: No products found")
-      } else {
-        setSystemStatus("healthy")
-      }
     } catch (error) {
-      console.error("❌ STORE PAGE: Error fetching products:", error)
-      setSystemStatus("error")
-
+      console.error("Failed to fetch products:", error)
       toast({
         title: "Error",
-        description: "Failed to load products. Check your connection and try again.",
+        description: "Failed to load products",
         variant: "destructive",
       })
     } finally {
@@ -143,7 +86,7 @@ export default function StorePage() {
       dispatch({ type: "ADD_ITEM", payload: productToAdd })
       toast({
         title: "Added to Cart",
-        description: `${product.name} has been added to your cart${customPrice ? ` at ${formatCurrency(customPrice)}` : ""}`,
+        description: `${product.name} added${customPrice ? ` at ${formatCurrency(customPrice)}` : ""}`,
       })
     } else {
       toast({
@@ -154,78 +97,75 @@ export default function StorePage() {
     }
   }
 
-  const handleReloadDemo = async () => {
+  const handleLoadDemo = async () => {
     try {
       setLoading(true)
-      setSyncStatus("syncing")
-      console.log("🔄 STORE PAGE: Reloading demo products...")
 
-      db.reloadDemoProducts()
+      // Create demo products
+      const demoProducts = [
+        {
+          name: "Premium Cotton Shirt",
+          barcode: "1000000001",
+          price: 899,
+          quantity: 25,
+          soldQuantity: 5,
+          category: "shirts",
+        },
+        {
+          name: "Designer Jeans",
+          barcode: "1000000002",
+          price: 1299,
+          quantity: 15,
+          soldQuantity: 8,
+          category: "pants",
+        },
+        {
+          name: "Elegant Dress",
+          barcode: "1000000003",
+          price: 1599,
+          quantity: 12,
+          soldQuantity: 3,
+          category: "dresses",
+        },
+        {
+          name: "Casual Sneakers",
+          barcode: "1000000004",
+          price: 2199,
+          quantity: 20,
+          soldQuantity: 7,
+          category: "shoes",
+        },
+        {
+          name: "Leather Handbag",
+          barcode: "1000000005",
+          price: 2499,
+          quantity: 8,
+          soldQuantity: 2,
+          category: "accessories",
+        },
+      ]
+
+      for (const product of demoProducts) {
+        await db.createProduct(product)
+      }
+
       await fetchProducts()
-
       toast({
         title: "Demo Products Loaded",
-        description: "Sample products have been loaded and synced across all devices",
+        description: "Sample products have been added to your store",
       })
-
-      setLastSync(new Date())
-      setSyncStatus("online")
     } catch (error) {
-      console.error("❌ STORE PAGE: Error reloading demo:", error)
       toast({
         title: "Error",
         description: "Failed to load demo products",
         variant: "destructive",
       })
-      setSyncStatus("offline")
     } finally {
       setLoading(false)
     }
   }
 
-  const forceSync = async () => {
-    try {
-      setSyncStatus("syncing")
-      await fetchProducts()
-      setLastSync(new Date())
-      setSyncStatus("online")
-      toast({
-        title: "Sync Complete",
-        description: "All devices are now synchronized",
-      })
-    } catch (error) {
-      setSyncStatus("offline")
-      toast({
-        title: "Sync Failed",
-        description: "Unable to sync. Check your connection.",
-        variant: "destructive",
-      })
-    }
-  }
-
   const categories = ["all", "shirts", "pants", "dresses", "shoes", "accessories"]
-
-  const getSyncIcon = () => {
-    switch (syncStatus) {
-      case "online":
-        return <Cloud className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
-      case "syncing":
-        return <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500 animate-spin" />
-      case "offline":
-        return <CloudOff className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
-    }
-  }
-
-  const getSyncText = () => {
-    switch (syncStatus) {
-      case "online":
-        return "Online & Synced"
-      case "syncing":
-        return "Syncing..."
-      case "offline":
-        return "Offline"
-    }
-  }
 
   if (loading) {
     return (
@@ -235,7 +175,6 @@ export default function StorePage() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-blue-700">Loading Moraya Fashion Store...</p>
-            <p className="text-sm text-blue-500 mt-2">Syncing across all devices...</p>
           </div>
         </div>
       </div>
@@ -252,61 +191,9 @@ export default function StorePage() {
             <div className="text-3xl sm:text-4xl mb-2">🕉️</div>
             <h1 className="text-2xl sm:text-3xl font-bold text-blue-900 mb-2">Moraya Fashion</h1>
             <p className="text-sm sm:text-base text-blue-700">Ganpati Bappa Morya • Premium Fashion Collection</p>
-            <div className="flex items-center justify-center gap-2 mt-2">
-              {getSyncIcon()}
-              <span className="text-xs sm:text-sm text-gray-600">{getSyncText()}</span>
-              {lastSync && (
-                <span className="text-xs text-gray-500 hidden sm:inline">
-                  • Last sync: {lastSync.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
           </div>
 
-          {/* System Status Alert */}
-          {systemStatus === "error" && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
-                <h3 className="font-medium text-red-900 text-sm sm:text-base">System Error</h3>
-              </div>
-              <p className="text-red-700 mt-1 text-sm">
-                Unable to load products. Check your internet connection and try refreshing.
-              </p>
-            </div>
-          )}
-
-          {systemStatus === "warning" && products.length === 0 && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500" />
-                  <div>
-                    <h3 className="font-medium text-yellow-900 text-sm sm:text-base">No Products Available</h3>
-                    <p className="text-yellow-700 text-xs sm:text-sm">Load demo products to get started</p>
-                  </div>
-                </div>
-                <Button onClick={handleReloadDemo} variant="outline" className="bg-white text-sm">
-                  Load Demo Products
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Multi-Device Sync Info */}
-          {products.length > 0 && (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Cloud className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
-                <h3 className="font-medium text-blue-900 text-sm sm:text-base">Multi-Device Sync Active</h3>
-              </div>
-              <p className="text-blue-700 mt-1 text-xs sm:text-sm">
-                Products sync across all your devices automatically. Changes appear within 10 seconds!
-              </p>
-            </div>
-          )}
-
-          {/* Mobile-optimized search and filters */}
+          {/* Search and filters */}
           <div className="space-y-3 sm:space-y-0 sm:flex sm:gap-4 mb-4 sm:mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-400 h-4 w-4" />
@@ -330,10 +217,6 @@ export default function StorePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={forceSync} variant="outline" className="bg-white" size="sm">
-                <Cloud className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Sync</span>
-              </Button>
               <Button onClick={fetchProducts} variant="outline" className="bg-white" size="sm">
                 <RefreshCw className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Refresh</span>
@@ -351,15 +234,14 @@ export default function StorePage() {
               </h3>
               <p className="text-blue-600 mb-4 text-center text-sm sm:text-base">
                 {products.length === 0
-                  ? "Load demo products or add products in the admin panel"
+                  ? "Add products in the admin panel or load demo products"
                   : "Try adjusting your search or filter criteria"}
               </p>
               {products.length === 0 && (
-                <Button onClick={handleReloadDemo} className="bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleLoadDemo} className="bg-blue-600 hover:bg-blue-700">
                   Load Demo Products
                 </Button>
               )}
-              <p className="text-sm text-blue-500 mt-2">Total products in store: {products.length}</p>
             </CardContent>
           </Card>
         ) : (
@@ -405,9 +287,6 @@ export default function StorePage() {
                       </Badge>
                     </div>
                     <p className="text-xs sm:text-sm text-blue-600 font-mono">#{product.barcode}</p>
-                    <p className="text-xs sm:text-sm text-blue-600">
-                      Stock: {product.quantity} | Sold: {product.soldQuantity}
-                    </p>
 
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Input
@@ -440,22 +319,6 @@ export default function StorePage() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Mobile-optimized Floating Sync Status */}
-      <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 bg-white rounded-lg shadow-lg border p-2 sm:p-3">
-        <div className="flex items-center gap-1 sm:gap-2">
-          {getSyncIcon()}
-          <div className="text-xs sm:text-sm">
-            <div className="font-medium">{getSyncText()}</div>
-            {lastSync && (
-              <div className="text-xs text-gray-500 hidden sm:block">Last: {lastSync.toLocaleTimeString()}</div>
-            )}
-          </div>
-          <Button size="sm" variant="outline" onClick={forceSync} className="text-xs px-2">
-            Sync
-          </Button>
-        </div>
       </div>
     </div>
   )

@@ -26,8 +26,11 @@ export interface Bill {
   id: string
   items: CartItem[]
   total: number
+  subtotal?: number
+  discount?: number
   customerPhone?: string
   qrCode: string
+  upiId?: string
   createdAt: Date
 }
 
