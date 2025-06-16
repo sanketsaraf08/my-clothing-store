@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Search, Package, RefreshCw } from "lucide-react"
+import { ShoppingCart, Search, Package, RefreshCw, AlertCircle } from "lucide-react"
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
@@ -20,17 +20,25 @@ export default function StorePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { dispatch } = useCart()
 
   useEffect(() => {
+    console.log("🚀 STORE PAGE: Component mounted")
     initializeStore()
 
-    // Subscribe to real-time updates
-    const unsubscribe = db.subscribeToProducts((updatedProducts) => {
-      setProducts(updatedProducts)
-    })
+    // Listen for storage changes
+    const handleStorageChange = (event: any) => {
+      console.log("📡 STORE PAGE: Storage change detected:", event.detail)
+      if (event.detail?.type === "products") {
+        setProducts(event.detail.data)
+      }
+    }
 
-    return unsubscribe
+    if (typeof window !== "undefined") {
+      window.addEventListener("moraya_data_updated", handleStorageChange)
+      return () => window.removeEventListener("moraya_data_updated", handleStorageChange)
+    }
   }, [])
 
   useEffect(() => {
@@ -39,27 +47,43 @@ export default function StorePage() {
 
   const initializeStore = async () => {
     try {
+      console.log("🔧 STORE PAGE: Initializing...")
+      setLoading(true)
+      setError(null)
+
       await db.initialize()
+      console.log("✅ STORE PAGE: Database initialized")
+
       await fetchProducts()
+      console.log("✅ STORE PAGE: Initialization complete")
     } catch (error) {
-      console.error("Failed to initialize store:", error)
+      console.error("❌ STORE PAGE: Initialization failed:", error)
+      setError("Failed to initialize store")
+    } finally {
+      setLoading(false)
     }
   }
 
   const fetchProducts = async () => {
     try {
-      setLoading(true)
+      console.log("📦 STORE PAGE: Fetching products...")
       const data = await db.getProducts()
+      console.log(
+        `✅ STORE PAGE: Loaded ${data.length} products:`,
+        data.map((p) => p.name),
+      )
+
       setProducts(data)
+      setError(null)
     } catch (error) {
-      console.error("Failed to fetch products:", error)
+      console.error("❌ STORE PAGE: Failed to fetch products:", error)
+      setError("Failed to load products")
+
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: "Failed to load products. Please try refreshing.",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -77,6 +101,7 @@ export default function StorePage() {
       filtered = filtered.filter((product) => product.category === selectedCategory)
     }
 
+    console.log(`🔍 STORE PAGE: Filtered ${filtered.length} products from ${products.length} total`)
     setFilteredProducts(filtered)
   }
 
@@ -100,61 +125,17 @@ export default function StorePage() {
   const handleLoadDemo = async () => {
     try {
       setLoading(true)
+      console.log("🔄 STORE PAGE: Loading demo products...")
 
-      // Create demo products
-      const demoProducts = [
-        {
-          name: "Premium Cotton Shirt",
-          barcode: "1000000001",
-          price: 899,
-          quantity: 25,
-          soldQuantity: 5,
-          category: "shirts",
-        },
-        {
-          name: "Designer Jeans",
-          barcode: "1000000002",
-          price: 1299,
-          quantity: 15,
-          soldQuantity: 8,
-          category: "pants",
-        },
-        {
-          name: "Elegant Dress",
-          barcode: "1000000003",
-          price: 1599,
-          quantity: 12,
-          soldQuantity: 3,
-          category: "dresses",
-        },
-        {
-          name: "Casual Sneakers",
-          barcode: "1000000004",
-          price: 2199,
-          quantity: 20,
-          soldQuantity: 7,
-          category: "shoes",
-        },
-        {
-          name: "Leather Handbag",
-          barcode: "1000000005",
-          price: 2499,
-          quantity: 8,
-          soldQuantity: 2,
-          category: "accessories",
-        },
-      ]
-
-      for (const product of demoProducts) {
-        await db.createProduct(product)
-      }
-
+      db.reloadDemoProducts()
       await fetchProducts()
+
       toast({
         title: "Demo Products Loaded",
         description: "Sample products have been added to your store",
       })
     } catch (error) {
+      console.error("❌ STORE PAGE: Failed to load demo:", error)
       toast({
         title: "Error",
         description: "Failed to load demo products",
@@ -193,6 +174,20 @@ export default function StorePage() {
             <p className="text-sm sm:text-base text-blue-700">Ganpati Bappa Morya • Premium Fashion Collection</p>
           </div>
 
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+                <h3 className="font-medium text-red-900 text-sm sm:text-base">Error</h3>
+              </div>
+              <p className="text-red-700 mt-1 text-sm">{error}</p>
+              <Button onClick={fetchProducts} variant="outline" className="mt-2 bg-white" size="sm">
+                Try Again
+              </Button>
+            </div>
+          )}
+
           {/* Search and filters */}
           <div className="space-y-3 sm:space-y-0 sm:flex sm:gap-4 mb-4 sm:mb-6">
             <div className="relative flex-1">
@@ -223,6 +218,11 @@ export default function StorePage() {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Debug Info */}
+        <div className="mb-4 text-xs text-gray-500">
+          Total products: {products.length} | Filtered: {filteredProducts.length}
         </div>
 
         {filteredProducts.length === 0 ? (

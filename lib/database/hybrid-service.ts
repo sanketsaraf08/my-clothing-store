@@ -5,6 +5,7 @@ import type { Product, Bill } from "@/lib/types"
 export class HybridDatabaseService {
   private static instance: HybridDatabaseService
   private useCloud = false
+  private isInitialized = false
 
   static getInstance(): HybridDatabaseService {
     if (!HybridDatabaseService.instance) {
@@ -14,16 +15,30 @@ export class HybridDatabaseService {
   }
 
   async initialize(): Promise<void> {
-    // Try to initialize cloud database
-    this.useCloud = await cloudDb.initialize()
+    if (this.isInitialized) return
 
-    if (this.useCloud) {
-      console.log("🌐 Using cloud database")
-      // Sync local data to cloud on first connection
-      await this.syncLocalToCloud()
-    } else {
-      console.log("💾 Using local storage")
+    console.log("🔧 Initializing hybrid database service...")
+
+    // Always ensure demo data exists locally
+    StorageService.initializeDemoData()
+
+    // Try to initialize cloud database
+    try {
+      this.useCloud = await cloudDb.initialize()
+      if (this.useCloud) {
+        console.log("🌐 Cloud database connected - using hybrid mode")
+        // Sync local data to cloud on first connection
+        await this.syncLocalToCloud()
+      } else {
+        console.log("💾 Cloud unavailable - using local storage only")
+      }
+    } catch (error) {
+      console.warn("Cloud initialization failed, using local storage:", error)
+      this.useCloud = false
     }
+
+    this.isInitialized = true
+    console.log("✅ Hybrid database service initialized")
   }
 
   private async syncLocalToCloud(): Promise<void> {
@@ -31,10 +46,13 @@ export class HybridDatabaseService {
       const localProducts = StorageService.getProducts()
       const cloudProducts = await cloudDb.getProducts()
 
+      console.log(`📊 Local products: ${localProducts.length}, Cloud products: ${cloudProducts.length}`)
+
       // Upload local products that don't exist in cloud
       for (const localProduct of localProducts) {
         const existsInCloud = cloudProducts.some((cp) => cp.barcode === localProduct.barcode)
         if (!existsInCloud) {
+          console.log(`⬆️ Uploading product to cloud: ${localProduct.name}`)
           await cloudDb.createProduct({
             name: localProduct.name,
             barcode: localProduct.barcode,
@@ -53,17 +71,37 @@ export class HybridDatabaseService {
 
   // Products
   async getProducts(): Promise<Product[]> {
-    if (this.useCloud) {
-      const cloudProducts = await cloudDb.getProducts()
-      // Also update local storage as backup
-      StorageService.saveProducts(cloudProducts)
-      return cloudProducts
-    } else {
-      return StorageService.getProducts()
+    console.log("📦 Getting products...")
+
+    try {
+      if (this.useCloud) {
+        console.log("🌐 Fetching from cloud...")
+        const cloudProducts = await cloudDb.getProducts()
+        console.log(`✅ Got ${cloudProducts.length} products from cloud`)
+
+        // Also update local storage as backup
+        StorageService.saveProducts(cloudProducts)
+        return cloudProducts
+      } else {
+        console.log("💾 Fetching from local storage...")
+        const localProducts = StorageService.getProducts()
+        console.log(`✅ Got ${localProducts.length} products from local storage`)
+        return localProducts
+      }
+    } catch (error) {
+      console.error("❌ Error fetching products:", error)
+
+      // Fallback to local storage
+      console.log("🔄 Falling back to local storage...")
+      const localProducts = StorageService.getProducts()
+      console.log(`✅ Fallback: Got ${localProducts.length} products from local storage`)
+      return localProducts
     }
   }
 
   async createProduct(product: Omit<Product, "id" | "createdAt" | "updatedAt">): Promise<Product> {
+    console.log(`➕ Creating product: ${product.name}`)
+
     // Create locally first for instant response
     const localProducts = StorageService.getProducts()
     const newProduct: Product = {
@@ -75,18 +113,25 @@ export class HybridDatabaseService {
 
     localProducts.unshift(newProduct)
     StorageService.saveProducts(localProducts)
+    console.log(`✅ Product created locally: ${newProduct.name}`)
 
     // Try to sync to cloud
     if (this.useCloud) {
-      const cloudProduct = await cloudDb.createProduct(product)
-      if (cloudProduct) {
-        // Update local with cloud ID
-        const index = localProducts.findIndex((p) => p.barcode === product.barcode)
-        if (index !== -1) {
-          localProducts[index] = cloudProduct
-          StorageService.saveProducts(localProducts)
+      try {
+        console.log(`🌐 Syncing to cloud: ${product.name}`)
+        const cloudProduct = await cloudDb.createProduct(product)
+        if (cloudProduct) {
+          // Update local with cloud ID
+          const index = localProducts.findIndex((p) => p.barcode === product.barcode)
+          if (index !== -1) {
+            localProducts[index] = cloudProduct
+            StorageService.saveProducts(localProducts)
+            console.log(`✅ Product synced to cloud: ${cloudProduct.name}`)
+          }
+          return cloudProduct
         }
-        return cloudProduct
+      } catch (error) {
+        console.warn("Failed to sync product to cloud:", error)
       }
     }
 
@@ -94,6 +139,8 @@ export class HybridDatabaseService {
   }
 
   async updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
+    console.log(`📝 Updating product: ${id}`)
+
     // Update locally first
     const localProducts = StorageService.getProducts()
     const index = localProducts.findIndex((p) => p.id === id)
@@ -108,18 +155,27 @@ export class HybridDatabaseService {
 
     localProducts[index] = updatedProduct
     StorageService.saveProducts(localProducts)
+    console.log(`✅ Product updated locally: ${updatedProduct.name}`)
 
     // Try to sync to cloud
     if (this.useCloud) {
-      await cloudDb.updateProduct(id, updates)
+      try {
+        await cloudDb.updateProduct(id, updates)
+        console.log(`✅ Product synced to cloud: ${updatedProduct.name}`)
+      } catch (error) {
+        console.warn("Failed to sync product update to cloud:", error)
+      }
     }
 
     return updatedProduct
   }
 
   async deleteProduct(id: string): Promise<void> {
+    console.log(`🗑️ Deleting product: ${id}`)
+
     // Delete locally first
     const localProducts = StorageService.getProducts()
+    const productToDelete = localProducts.find((p) => p.id === id)
     const filteredProducts = localProducts.filter((p) => p.id !== id)
 
     if (filteredProducts.length === localProducts.length) {
@@ -127,15 +183,23 @@ export class HybridDatabaseService {
     }
 
     StorageService.saveProducts(filteredProducts)
+    console.log(`✅ Product deleted locally: ${productToDelete?.name}`)
 
     // Try to sync to cloud
     if (this.useCloud) {
-      await cloudDb.deleteProduct(id)
+      try {
+        await cloudDb.deleteProduct(id)
+        console.log(`✅ Product deleted from cloud: ${productToDelete?.name}`)
+      } catch (error) {
+        console.warn("Failed to delete product from cloud:", error)
+      }
     }
   }
 
   // Bills
   async createBill(bill: Omit<Bill, "id" | "createdAt">): Promise<Bill> {
+    console.log(`🧾 Creating bill with total: ${bill.total}`)
+
     // Create locally first
     const localBills = StorageService.getBills()
     const newBill: Bill = {
@@ -146,18 +210,24 @@ export class HybridDatabaseService {
 
     localBills.unshift(newBill)
     StorageService.saveBills(localBills)
+    console.log(`✅ Bill created locally: ${newBill.id}`)
 
     // Try to sync to cloud
     if (this.useCloud) {
-      const cloudBill = await cloudDb.createBill(bill)
-      if (cloudBill) {
-        // Update local with cloud ID
-        const index = localBills.findIndex((b) => b.createdAt.getTime() === newBill.createdAt.getTime())
-        if (index !== -1) {
-          localBills[index] = cloudBill
-          StorageService.saveBills(localBills)
+      try {
+        const cloudBill = await cloudDb.createBill(bill)
+        if (cloudBill) {
+          // Update local with cloud ID
+          const index = localBills.findIndex((b) => b.createdAt.getTime() === newBill.createdAt.getTime())
+          if (index !== -1) {
+            localBills[index] = cloudBill
+            StorageService.saveBills(localBills)
+            console.log(`✅ Bill synced to cloud: ${cloudBill.id}`)
+          }
+          return cloudBill
         }
-        return cloudBill
+      } catch (error) {
+        console.warn("Failed to sync bill to cloud:", error)
       }
     }
 
@@ -165,13 +235,28 @@ export class HybridDatabaseService {
   }
 
   async getBills(): Promise<Bill[]> {
-    if (this.useCloud) {
-      const cloudBills = await cloudDb.getBills()
-      // Also update local storage as backup
-      StorageService.saveBills(cloudBills)
-      return cloudBills
-    } else {
-      return StorageService.getBills()
+    console.log("🧾 Getting bills...")
+
+    try {
+      if (this.useCloud) {
+        const cloudBills = await cloudDb.getBills()
+        console.log(`✅ Got ${cloudBills.length} bills from cloud`)
+
+        // Also update local storage as backup
+        StorageService.saveBills(cloudBills)
+        return cloudBills
+      } else {
+        const localBills = StorageService.getBills()
+        console.log(`✅ Got ${localBills.length} bills from local storage`)
+        return localBills
+      }
+    } catch (error) {
+      console.error("Error fetching bills:", error)
+
+      // Fallback to local storage
+      const localBills = StorageService.getBills()
+      console.log(`✅ Fallback: Got ${localBills.length} bills from local storage`)
+      return localBills
     }
   }
 
@@ -192,6 +277,14 @@ export class HybridDatabaseService {
 
   isCloudConnected(): boolean {
     return this.useCloud
+  }
+
+  // Force reload demo products
+  reloadDemoProducts(): void {
+    console.log("🔄 Reloading demo products...")
+    StorageService.clearAll()
+    StorageService.initializeDemoData()
+    console.log("✅ Demo products reloaded")
   }
 }
 
