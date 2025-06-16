@@ -10,14 +10,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Edit, Trash2, Package, Printer, RefreshCw, RotateCcw } from "lucide-react"
+import { Plus, Edit, Trash2, Package, Printer, RefreshCw, RotateCcw, AlertCircle } from "lucide-react"
 import type { Product } from "@/lib/types"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { db } from "@/lib/database"
+import { db } from "@/lib/database-new"
 import Navigation from "@/components/navigation"
 import BarcodeSticker from "@/components/barcode-sticker"
-import DebugPanel from "@/components/debug-panel"
+import SystemDiagnostics from "@/components/system-diagnostics"
 
 export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [selectedProductForSticker, setSelectedProductForSticker] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [systemStatus, setSystemStatus] = useState<"unknown" | "healthy" | "warning" | "error">("unknown")
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -35,44 +36,66 @@ export default function AdminPage() {
   })
 
   useEffect(() => {
-    // Initialize database and load products
-    initializeAndFetch()
+    console.log("🚀 ADMIN PAGE: Starting initialization...")
+    initializeSystem()
 
-    // Listen for storage changes
-    const handleStorageChange = () => {
-      console.log("🔄 Storage changed, refreshing products...")
+    // Listen for data updates
+    const handleDataUpdate = (event: any) => {
+      console.log("📡 ADMIN PAGE: Data update received:", event.detail)
       fetchProducts()
     }
 
     if (typeof window !== "undefined") {
-      window.addEventListener("storage", handleStorageChange)
-      return () => window.removeEventListener("storage", handleStorageChange)
+      window.addEventListener("moraya_data_updated", handleDataUpdate)
+      return () => window.removeEventListener("moraya_data_updated", handleDataUpdate)
     }
   }, [])
 
-  const initializeAndFetch = async () => {
+  const initializeSystem = async () => {
     try {
-      console.log("🚀 Initializing admin panel...")
+      console.log("🔧 ADMIN PAGE: Initializing database...")
       await db.initialize()
+
+      console.log("📦 ADMIN PAGE: Loading products...")
       await fetchProducts()
+
+      setSystemStatus("healthy")
+      console.log("✅ ADMIN PAGE: Initialization complete")
     } catch (error) {
-      console.error("❌ Error initializing:", error)
+      console.error("❌ ADMIN PAGE: Initialization failed:", error)
+      setSystemStatus("error")
+
+      toast({
+        title: "System Error",
+        description: "Failed to initialize. Click the Diagnostics button for help.",
+        variant: "destructive",
+      })
     }
   }
 
   const fetchProducts = async () => {
     try {
       setIsLoading(true)
-      console.log("📦 Fetching products directly from database...")
+      console.log("📦 ADMIN PAGE: Fetching products...")
 
       const data = await db.getProducts()
-      console.log(`✅ Loaded ${data.length} products`)
+      console.log(`✅ ADMIN PAGE: Loaded ${data.length} products`)
+
       setProducts(data)
+
+      if (data.length === 0) {
+        setSystemStatus("warning")
+        console.log("⚠️ ADMIN PAGE: No products found")
+      } else {
+        setSystemStatus("healthy")
+      }
     } catch (error) {
-      console.error("❌ Error fetching products:", error)
+      console.error("❌ ADMIN PAGE: Error fetching products:", error)
+      setSystemStatus("error")
+
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: "Failed to load products. Check diagnostics for details.",
         variant: "destructive",
       })
     } finally {
@@ -121,21 +144,21 @@ export default function AdminPage() {
       soldQuantity: editingProduct?.soldQuantity || 0,
     }
 
-    console.log("🔄 Submitting product:", productData)
+    console.log("🔄 ADMIN PAGE: Submitting product:", productData)
 
     try {
       setIsSubmitting(true)
 
       let result: Product
       if (editingProduct) {
-        console.log("✏️ Updating existing product...")
+        console.log("✏️ ADMIN PAGE: Updating existing product...")
         result = await db.updateProduct(editingProduct.id, productData)
       } else {
-        console.log("➕ Creating new product...")
+        console.log("➕ ADMIN PAGE: Creating new product...")
         result = await db.createProduct(productData)
       }
 
-      console.log("✅ Product operation successful:", result)
+      console.log("✅ ADMIN PAGE: Product operation successful:", result)
 
       toast({
         title: "Success!",
@@ -147,7 +170,7 @@ export default function AdminPage() {
       resetForm()
       setIsDialogOpen(false)
     } catch (error) {
-      console.error("❌ Error saving product:", error)
+      console.error("❌ ADMIN PAGE: Error saving product:", error)
       toast({
         title: "Error",
         description: `Failed to ${editingProduct ? "update" : "create"} product: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -159,7 +182,7 @@ export default function AdminPage() {
   }
 
   const handleEdit = (product: Product) => {
-    console.log("✏️ Editing product:", product.name)
+    console.log("✏️ ADMIN PAGE: Editing product:", product.name)
     setEditingProduct(product)
     setFormData({
       name: product.name,
@@ -177,7 +200,7 @@ export default function AdminPage() {
 
     try {
       setIsLoading(true)
-      console.log("🗑️ Deleting product:", productId)
+      console.log("🗑️ ADMIN PAGE: Deleting product:", productId)
 
       await db.deleteProduct(productId)
 
@@ -188,7 +211,7 @@ export default function AdminPage() {
 
       await fetchProducts()
     } catch (error) {
-      console.error("❌ Error deleting product:", error)
+      console.error("❌ ADMIN PAGE: Error deleting product:", error)
       toast({
         title: "Error",
         description: `Failed to delete product: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -204,7 +227,7 @@ export default function AdminPage() {
 
     try {
       setIsLoading(true)
-      console.log("🔄 Reloading demo products...")
+      console.log("🔄 ADMIN PAGE: Reloading demo products...")
 
       db.reloadDemoProducts()
       await fetchProducts()
@@ -214,7 +237,7 @@ export default function AdminPage() {
         description: "Demo products reloaded successfully",
       })
     } catch (error) {
-      console.error("❌ Error reloading demo:", error)
+      console.error("❌ ADMIN PAGE: Error reloading demo:", error)
       toast({
         title: "Error",
         description: "Failed to reload demo products",
@@ -238,6 +261,32 @@ export default function AdminPage() {
 
   const categories = ["shirts", "pants", "dresses", "shoes", "accessories"]
 
+  const getStatusColor = () => {
+    switch (systemStatus) {
+      case "healthy":
+        return "text-green-600"
+      case "warning":
+        return "text-yellow-600"
+      case "error":
+        return "text-red-600"
+      default:
+        return "text-gray-600"
+    }
+  }
+
+  const getStatusText = () => {
+    switch (systemStatus) {
+      case "healthy":
+        return "System Healthy"
+      case "warning":
+        return "System Warning"
+      case "error":
+        return "System Error"
+      default:
+        return "System Unknown"
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navigation />
@@ -247,7 +296,10 @@ export default function AdminPage() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-blue-900 mb-2">Admin Panel</h1>
-              <p className="text-blue-700">Manage your product inventory</p>
+              <div className="flex items-center gap-2">
+                <p className="text-blue-700">Manage your product inventory</p>
+                <span className={`text-sm font-medium ${getStatusColor()}`}>• {getStatusText()}</span>
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -369,6 +421,32 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* System Status Alert */}
+        {systemStatus === "error" && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <h3 className="font-medium text-red-900">System Error Detected</h3>
+            </div>
+            <p className="text-red-700 mt-1">
+              The system is experiencing issues. Click the "Diagnostics" button in the bottom-left corner for detailed
+              troubleshooting.
+            </p>
+          </div>
+        )}
+
+        {systemStatus === "warning" && products.length === 0 && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-500" />
+              <h3 className="font-medium text-yellow-900">No Products Found</h3>
+            </div>
+            <p className="text-yellow-700 mt-1">
+              No products are currently loaded. Click "Reload Demo" to load sample products or add your first product.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <Card className="border-blue-200 shadow-lg">
@@ -463,7 +541,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <DebugPanel />
+      <SystemDiagnostics />
     </div>
   )
 }

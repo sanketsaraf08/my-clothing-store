@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ShoppingCart, Search, Package, RefreshCw } from "lucide-react"
+import { ShoppingCart, Search, Package, RefreshCw, AlertCircle } from "lucide-react"
 import { useCart } from "@/contexts/cart-context"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { db } from "@/lib/database"
+import { db } from "@/lib/database-new"
 import Navigation from "@/components/navigation"
+import SystemDiagnostics from "@/components/system-diagnostics"
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -20,20 +21,22 @@ export default function StorePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [loading, setLoading] = useState(true)
+  const [systemStatus, setSystemStatus] = useState<"unknown" | "healthy" | "warning" | "error">("unknown")
   const { dispatch } = useCart()
 
   useEffect(() => {
-    initializeAndFetch()
+    console.log("🚀 STORE PAGE: Starting initialization...")
+    initializeStore()
 
-    // Listen for storage changes
-    const handleStorageChange = () => {
-      console.log("Storage changed on store page, refreshing...")
+    // Listen for data updates
+    const handleDataUpdate = (event: any) => {
+      console.log("📡 STORE PAGE: Data update received:", event.detail)
       fetchProducts()
     }
 
     if (typeof window !== "undefined") {
-      window.addEventListener("storage", handleStorageChange)
-      return () => window.removeEventListener("storage", handleStorageChange)
+      window.addEventListener("moraya_data_updated", handleDataUpdate)
+      return () => window.removeEventListener("moraya_data_updated", handleDataUpdate)
     }
   }, [])
 
@@ -41,26 +44,45 @@ export default function StorePage() {
     filterProducts()
   }, [products, searchTerm, selectedCategory])
 
-  const initializeAndFetch = async () => {
+  const initializeStore = async () => {
     try {
+      console.log("🔧 STORE PAGE: Initializing database...")
       await db.initialize()
+
+      console.log("📦 STORE PAGE: Loading products...")
       await fetchProducts()
+
+      setSystemStatus("healthy")
+      console.log("✅ STORE PAGE: Initialization complete")
     } catch (error) {
-      console.error("Error initializing store:", error)
+      console.error("❌ STORE PAGE: Initialization failed:", error)
+      setSystemStatus("error")
     }
   }
 
   const fetchProducts = async () => {
     try {
       setLoading(true)
+      console.log("📦 STORE PAGE: Fetching products...")
+
       const data = await db.getProducts()
-      console.log("Store page: Loaded products:", data.length)
+      console.log(`✅ STORE PAGE: Loaded ${data.length} products`)
+
       setProducts(data)
+
+      if (data.length === 0) {
+        setSystemStatus("warning")
+        console.log("⚠️ STORE PAGE: No products found")
+      } else {
+        setSystemStatus("healthy")
+      }
     } catch (error) {
-      console.error("Error fetching products:", error)
+      console.error("❌ STORE PAGE: Error fetching products:", error)
+      setSystemStatus("error")
+
       toast({
         title: "Error",
-        description: "Failed to load products",
+        description: "Failed to load products. Check diagnostics for details.",
         variant: "destructive",
       })
     } finally {
@@ -102,6 +124,30 @@ export default function StorePage() {
     }
   }
 
+  const handleReloadDemo = async () => {
+    try {
+      setLoading(true)
+      console.log("🔄 STORE PAGE: Reloading demo products...")
+
+      db.reloadDemoProducts()
+      await fetchProducts()
+
+      toast({
+        title: "Demo Products Loaded",
+        description: "Sample products have been loaded successfully",
+      })
+    } catch (error) {
+      console.error("❌ STORE PAGE: Error reloading demo:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load demo products",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const categories = ["all", "shirts", "pants", "dresses", "shoes", "accessories"]
 
   if (loading) {
@@ -109,7 +155,10 @@ export default function StorePage() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <Navigation />
         <div className="flex items-center justify-center h-96">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-blue-700">Loading Moraya Fashion Store...</p>
+          </div>
         </div>
       </div>
     )
@@ -126,6 +175,36 @@ export default function StorePage() {
             <h1 className="text-3xl font-bold text-blue-900 mb-2">Moraya Fashion</h1>
             <p className="text-blue-700">Ganpati Bappa Morya • Premium Fashion Collection</p>
           </div>
+
+          {/* System Status Alert */}
+          {systemStatus === "error" && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                <h3 className="font-medium text-red-900">System Error</h3>
+              </div>
+              <p className="text-red-700 mt-1">
+                Unable to load products. Click the "Diagnostics" button for troubleshooting.
+              </p>
+            </div>
+          )}
+
+          {systemStatus === "warning" && products.length === 0 && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                  <div>
+                    <h3 className="font-medium text-yellow-900">No Products Available</h3>
+                    <p className="text-yellow-700 text-sm">Load demo products to get started</p>
+                  </div>
+                </div>
+                <Button onClick={handleReloadDemo} variant="outline" className="bg-white">
+                  Load Demo Products
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="relative flex-1">
@@ -160,8 +239,19 @@ export default function StorePage() {
           <Card className="border-blue-200 shadow-lg">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Package className="h-12 w-12 text-blue-400 mb-4" />
-              <h3 className="text-lg font-medium text-blue-900 mb-2">No products found</h3>
-              <p className="text-blue-600">Try adjusting your search or filter criteria</p>
+              <h3 className="text-lg font-medium text-blue-900 mb-2">
+                {products.length === 0 ? "No products available" : "No products found"}
+              </h3>
+              <p className="text-blue-600 mb-4">
+                {products.length === 0
+                  ? "Load demo products or add products in the admin panel"
+                  : "Try adjusting your search or filter criteria"}
+              </p>
+              {products.length === 0 && (
+                <Button onClick={handleReloadDemo} className="bg-blue-600 hover:bg-blue-700">
+                  Load Demo Products
+                </Button>
+              )}
               <p className="text-sm text-blue-500 mt-2">Total products in store: {products.length}</p>
             </CardContent>
           </Card>
@@ -241,6 +331,8 @@ export default function StorePage() {
           </div>
         )}
       </div>
+
+      <SystemDiagnostics />
     </div>
   )
 }
