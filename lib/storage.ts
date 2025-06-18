@@ -1,30 +1,74 @@
-import type { CartItem } from "./types"
+import type { Product, CartItem, Bill } from "./types"
 
+type StockSummary = {
+  totalProducts: number
+  totalCurrentStock: number
+  totalSoldStock: number
+  totalStockValue: number
+  totalSoldValue: number
+}
+
+// Simulated database using localStorage
 export class StorageService {
+  private static PRODUCTS_KEY = "clothing_store_products"
   private static CART_KEY = "clothing_store_cart"
+  private static BILLS_KEY = "clothing_store_bills"
   private static BARCODE_COUNTER_KEY = "barcode_counter"
 
-  /**
-   * Get items in cart (client-side only)
-   */
+  static getProducts(): Product[] {
+    if (typeof window === "undefined") return []
+    try {
+      const data = localStorage.getItem(this.PRODUCTS_KEY)
+      const products = data ? JSON.parse(data) : this.getDefaultProducts()
+      console.log("Storage: Loaded products:", products.length)
+      return products
+    } catch (error) {
+      console.error("Storage: Error loading products:", error)
+      return this.getDefaultProducts()
+    }
+  }
+
+  static saveProducts(products: Product[]): void {
+    if (typeof window === "undefined") return
+    try {
+      localStorage.setItem(this.PRODUCTS_KEY, JSON.stringify(products))
+      console.log("Storage: Saved products successfully:", products.length)
+
+      // Trigger a storage event to notify other components
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: this.PRODUCTS_KEY,
+          newValue: JSON.stringify(products),
+        }),
+      )
+    } catch (error) {
+      console.error("Storage: Error saving products:", error)
+    }
+  }
+
   static getCart(): CartItem[] {
     if (typeof window === "undefined") return []
     const data = localStorage.getItem(this.CART_KEY)
     return data ? JSON.parse(data) : []
   }
 
-  /**
-   * Save cart items (client-side only)
-   */
   static saveCart(cart: CartItem[]): void {
     if (typeof window === "undefined") return
     localStorage.setItem(this.CART_KEY, JSON.stringify(cart))
   }
 
-  /**
-   * Generate a unique barcode number using a local counter
-   * Only used for local creation, Supabase will store the value
-   */
+  static getBills(): Bill[] {
+    if (typeof window === "undefined") return []
+    const data = localStorage.getItem(this.BILLS_KEY)
+    return data ? JSON.parse(data) : []
+  }
+
+  static saveBills(bills: Bill[]): void {
+    if (typeof window === "undefined") return
+    localStorage.setItem(this.BILLS_KEY, JSON.stringify(bills))
+  }
+
+  // Generate automatic barcode
   static generateBarcode(): string {
     if (typeof window === "undefined") return "1000000001"
 
@@ -37,30 +81,114 @@ export class StorageService {
     return currentNumber.toString()
   }
 
-  /**
-   * 🔒 These methods are deprecated (handled by Supabase)
-   */
-  static getBills(): never {
-    throw new Error("❌ StorageService.getBills() is removed. Use db.getBills() instead.")
+  private static getDefaultProducts(): Product[] {
+    const defaultProducts = [
+      {
+        id: "1",
+        name: "Classic White T-Shirt",
+        barcode: "1000000001",
+        price: 599,
+        quantity: 50,
+        soldQuantity: 0,
+        category: "shirts",
+        image: "/placeholder.svg?height=300&width=300&text=White+T-Shirt",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "2",
+        name: "Blue Denim Jeans",
+        barcode: "1000000002",
+        price: 1999,
+        quantity: 30,
+        soldQuantity: 0,
+        category: "pants",
+        image: "/placeholder.svg?height=300&width=300&text=Denim+Jeans",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "3",
+        name: "Summer Floral Dress",
+        barcode: "1000000003",
+        price: 1799,
+        quantity: 25,
+        soldQuantity: 0,
+        category: "dresses",
+        image: "/placeholder.svg?height=300&width=300&text=Floral+Dress",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "4",
+        name: "Leather Sneakers",
+        barcode: "1000000004",
+        price: 2999,
+        quantity: 20,
+        soldQuantity: 0,
+        category: "shoes",
+        image: "/placeholder.svg?height=300&width=300&text=Leather+Sneakers",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "5",
+        name: "Cotton Kurta",
+        barcode: "1000000005",
+        price: 899,
+        quantity: 35,
+        soldQuantity: 0,
+        category: "shirts",
+        image: "/placeholder.svg?height=300&width=300&text=Cotton+Kurta",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "6",
+        name: "Designer Saree",
+        barcode: "1000000006",
+        price: 4999,
+        quantity: 15,
+        soldQuantity: 0,
+        category: "dresses",
+        image: "/placeholder.svg?height=300&width=300&text=Designer+Saree",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]
+
+    // Set initial counter
+    if (!localStorage.getItem(this.BARCODE_COUNTER_KEY)) {
+      localStorage.setItem(this.BARCODE_COUNTER_KEY, "1000000006")
+    }
+
+    this.saveProducts(defaultProducts)
+    return defaultProducts
   }
 
-  static saveBills(): never {
-    throw new Error("❌ StorageService.saveBills() is removed. Use db.createBill() instead.")
+  // Add method to update stock after sale
+  static updateProductStock(productId: string, soldQuantity: number): void {
+    const products = this.getProducts()
+    const productIndex = products.findIndex((p) => p.id === productId)
+
+    if (productIndex !== -1) {
+      products[productIndex].quantity -= soldQuantity
+      products[productIndex].soldQuantity += soldQuantity
+      products[productIndex].updatedAt = new Date()
+      this.saveProducts(products)
+    }
   }
 
-  static getProducts(): never {
-    throw new Error("❌ StorageService.getProducts() is removed. Use db.getProducts() instead.")
-  }
+  // Add method to get stock summary
+  static getStockSummary(): StockSummary {
+    const products = this.getProducts()
 
-  static saveProducts(): never {
-    throw new Error("❌ StorageService.saveProducts() is removed. Use db.createProduct() instead.")
-  }
-
-  static updateProductStock(): never {
-    throw new Error("❌ updateProductStock is removed. Use db.updateProduct() after a bill.")
-  }
-
-  static getStockSummary(): never {
-    throw new Error("❌ getStockSummary is removed. Calculate from db.getProducts() results.")
+    return {
+      totalProducts: products.length,
+      totalCurrentStock: products.reduce((sum, p) => sum + p.quantity, 0),
+      totalSoldStock: products.reduce((sum, p) => sum + p.soldQuantity, 0),
+      totalStockValue: products.reduce((sum, p) => sum + p.quantity * p.price, 0),
+      totalSoldValue: products.reduce((sum, p) => sum + p.soldQuantity * p.price, 0),
+    }
   }
 }
