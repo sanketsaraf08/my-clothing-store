@@ -1,31 +1,42 @@
-import type { CartItem } from "./types"
+        category: "dresses",
+        image: "/placeholder.svg?height=300&width=300&text=Designer+Saree",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]
 
-export class StorageService {
-  private static CART_KEY = "clothing_store_cart"
-  private static BARCODE_COUNTER_KEY = "barcode_counter"
+    // Set initial counter
+    if (!localStorage.getItem(this.BARCODE_COUNTER_KEY)) {
+      localStorage.setItem(this.BARCODE_COUNTER_KEY, "1000000006")
+    }
 
-  // CART: Local storage only (temporary data)
-  static getCart(): CartItem[] {
-    if (typeof window === "undefined") return []
-    const data = localStorage.getItem(this.CART_KEY)
-    return data ? JSON.parse(data) : []
+    this.saveProducts(defaultProducts)
+    return defaultProducts
   }
 
-  static saveCart(cart: CartItem[]): void {
-    if (typeof window === "undefined") return
-    localStorage.setItem(this.CART_KEY, JSON.stringify(cart))
+  // Add method to update stock after sale
+  static updateProductStock(productId: string, soldQuantity: number): void {
+    const products = this.getProducts()
+    const productIndex = products.findIndex((p) => p.id === productId)
+
+    if (productIndex !== -1) {
+      products[productIndex].quantity -= soldQuantity
+      products[productIndex].soldQuantity += soldQuantity
+      products[productIndex].updatedAt = new Date()
+      this.saveProducts(products)
+    }
   }
 
-  // BARCODE COUNTER (if you want sequential barcodes locally)
-  static generateBarcode(): string {
-    if (typeof window === "undefined") return "1000000001"
+  // Add method to get stock summary
+  static getStockSummary(): StockSummary {
+    const products = this.getProducts()
 
-    const counter = localStorage.getItem(this.BARCODE_COUNTER_KEY)
-    let currentNumber = counter ? Number.parseInt(counter) : 1000000000
-
-    currentNumber += 1
-    localStorage.setItem(this.BARCODE_COUNTER_KEY, currentNumber.toString())
-
-    return currentNumber.toString()
+    return {
+      totalProducts: products.length,
+      totalCurrentStock: products.reduce((sum, p) => sum + p.quantity, 0),
+      totalSoldStock: products.reduce((sum, p) => sum + p.soldQuantity, 0),
+      totalStockValue: products.reduce((sum, p) => sum + p.quantity * p.price, 0),
+      totalSoldValue: products.reduce((sum, p) => sum + p.soldQuantity * p.price, 0),
+    }
   }
 }
