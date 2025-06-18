@@ -1,42 +1,66 @@
-        category: "dresses",
-        image: "/placeholder.svg?height=300&width=300&text=Designer+Saree",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ]
+import type { CartItem } from "./types"
 
-    // Set initial counter
-    if (!localStorage.getItem(this.BARCODE_COUNTER_KEY)) {
-      localStorage.setItem(this.BARCODE_COUNTER_KEY, "1000000006")
-    }
+export class StorageService {
+  private static CART_KEY = "clothing_store_cart"
+  private static BARCODE_COUNTER_KEY = "barcode_counter"
 
-    this.saveProducts(defaultProducts)
-    return defaultProducts
+  /**
+   * Get items in cart (client-side only)
+   */
+  static getCart(): CartItem[] {
+    if (typeof window === "undefined") return []
+    const data = localStorage.getItem(this.CART_KEY)
+    return data ? JSON.parse(data) : []
   }
 
-  // Add method to update stock after sale
-  static updateProductStock(productId: string, soldQuantity: number): void {
-    const products = this.getProducts()
-    const productIndex = products.findIndex((p) => p.id === productId)
-
-    if (productIndex !== -1) {
-      products[productIndex].quantity -= soldQuantity
-      products[productIndex].soldQuantity += soldQuantity
-      products[productIndex].updatedAt = new Date()
-      this.saveProducts(products)
-    }
+  /**
+   * Save cart items (client-side only)
+   */
+  static saveCart(cart: CartItem[]): void {
+    if (typeof window === "undefined") return
+    localStorage.setItem(this.CART_KEY, JSON.stringify(cart))
   }
 
-  // Add method to get stock summary
-  static getStockSummary(): StockSummary {
-    const products = this.getProducts()
+  /**
+   * Generate a unique barcode number using a local counter
+   * Only used for local creation, Supabase will store the value
+   */
+  static generateBarcode(): string {
+    if (typeof window === "undefined") return "1000000001"
 
-    return {
-      totalProducts: products.length,
-      totalCurrentStock: products.reduce((sum, p) => sum + p.quantity, 0),
-      totalSoldStock: products.reduce((sum, p) => sum + p.soldQuantity, 0),
-      totalStockValue: products.reduce((sum, p) => sum + p.quantity * p.price, 0),
-      totalSoldValue: products.reduce((sum, p) => sum + p.soldQuantity * p.price, 0),
-    }
+    const counter = localStorage.getItem(this.BARCODE_COUNTER_KEY)
+    let currentNumber = counter ? Number.parseInt(counter) : 1000000000
+
+    currentNumber += 1
+    localStorage.setItem(this.BARCODE_COUNTER_KEY, currentNumber.toString())
+
+    return currentNumber.toString()
+  }
+
+  /**
+   * 🔒 These methods are deprecated (handled by Supabase)
+   */
+  static getBills(): never {
+    throw new Error("❌ StorageService.getBills() is removed. Use db.getBills() instead.")
+  }
+
+  static saveBills(): never {
+    throw new Error("❌ StorageService.saveBills() is removed. Use db.createBill() instead.")
+  }
+
+  static getProducts(): never {
+    throw new Error("❌ StorageService.getProducts() is removed. Use db.getProducts() instead.")
+  }
+
+  static saveProducts(): never {
+    throw new Error("❌ StorageService.saveProducts() is removed. Use db.createProduct() instead.")
+  }
+
+  static updateProductStock(): never {
+    throw new Error("❌ updateProductStock is removed. Use db.updateProduct() after a bill.")
+  }
+
+  static getStockSummary(): never {
+    throw new Error("❌ getStockSummary is removed. Calculate from db.getProducts() results.")
   }
 }
